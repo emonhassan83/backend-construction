@@ -7,6 +7,9 @@ const createValidationSchema = z.object({
     name: z.string({
       required_error: 'User name is required!',
     }),
+    username: z.string({
+      required_error: 'User name is required!',
+    }),
     email: z.string({
       required_error: 'Email is required!',
     }),
@@ -37,6 +40,11 @@ const updateValidationSchema = z.object({
     contactNumber: z
       .string({
         required_error: 'Contact number is required!',
+      })
+      .optional(),
+    companyName: z
+      .string({
+        required_error: 'Company name is required!',
       })
       .optional(),
   }),

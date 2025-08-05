@@ -21,6 +21,11 @@ const userSchema = new Schema<TUser, UserModel>(
       type: String,
       required: true,
     },
+    username: {
+      type: String,
+      required: true,
+      unique: true,
+    },
     email: {
       type: String,
       required: true,
@@ -37,6 +42,10 @@ const userSchema = new Schema<TUser, UserModel>(
       type: String,
       required: true,
     },
+    companyName: {
+      type: String,
+      default: null,
+    },
     photoUrl: {
       type: String,
       default: null,
@@ -44,7 +53,7 @@ const userSchema = new Schema<TUser, UserModel>(
     role: {
       type: String,
       enum: Object.values(USER_ROLE),
-      default: USER_ROLE.user,
+      default: USER_ROLE.worker,
     },
     registerWith: {
       type: String,

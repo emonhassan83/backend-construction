@@ -5,9 +5,11 @@ export interface TUser {
   _id: Types.ObjectId
   id: string
   name: string
+  username: string
   email: string
   password: string
   fcmToken: string,
+  companyName: string
   contactNumber: string
   photoUrl?: string
   role: TUserRole

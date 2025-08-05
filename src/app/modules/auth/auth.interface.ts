@@ -2,7 +2,7 @@ export interface TRegisterUser {
   name: string
   email: string
   password: string
-  role: 'admin' | 'user'
+  role: 'admin' | 'worker' | 'project_manager'
 }
 
 export interface TLoginUser {
