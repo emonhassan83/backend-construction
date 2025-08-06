@@ -4,6 +4,7 @@ import { AuthRoutes } from '../modules/auth/auth.route'
 import { otpRoutes } from '../modules/otp/otp.route'
 import { contentsRoutes } from '../modules/contents/contents.route'
 import { NotificationRoutes } from '../modules/notification/notification.route'
+import { WorkPhotoRoutes } from '../modules/workPhotos/workPhotos.route'
 
 const router = Router()
 
@@ -19,6 +20,10 @@ const moduleRoutes = [
   {
     path: '/otp',
     route: otpRoutes,
+  },
+  {
+    path: '/work-photos',
+    route: WorkPhotoRoutes,
   },
   {
     path: '/contents',
