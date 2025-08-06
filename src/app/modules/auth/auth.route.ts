@@ -14,7 +14,7 @@ router.post(
 )
 
 router.post(
-  '/login-worker',
+  '/worker/login',
   validateRequest(AuthValidation.vendorLoginValidationSchema),
   AuthControllers.loginWorker,
 )
@@ -51,9 +51,21 @@ router.post(
 )
 
 router.post(
+  '/worker/forget-password',
+  validateRequest(AuthValidation.workerForgetPasswordValidationSchema),
+  AuthControllers.workerForgetPassword,
+)
+
+router.post(
   '/reset-password',
   validateRequest(AuthValidation.resetPasswordValidationSchema),
   AuthControllers.resetPassword,
+)
+
+router.post(
+  '/worker/reset-password',
+  validateRequest(AuthValidation.workerResetPasswordValidationSchema),
+  AuthControllers.workerResetPassword,
 )
 
 export const AuthRoutes = router

@@ -73,10 +73,38 @@ const forgetPasswordValidationSchema = z.object({
   }),
 })
 
+const workerForgetPasswordValidationSchema = z.object({
+  body: z.object({
+    contactNumber: z.string({
+      required_error: 'User contact number is required!',
+    }),
+  }),
+})
+
 const resetPasswordValidationSchema = z.object({
   body: z.object({
     email: z.string({
       required_error: 'User email is required!',
+    }),
+    newPassword: z
+      .string({
+        required_error: 'User new password is required!',
+      })
+      .min(6, { message: 'Password must be at least 6 characters' })
+      .max(12, { message: 'Password cannot be more than 12 characters' }),
+    confirmPassword: z
+      .string({
+        required_error: 'User confirm password is required!',
+      })
+      .min(6, { message: 'Password must be at least 6 characters' })
+      .max(12, { message: 'Password cannot be more than 12 characters' }),
+  }),
+})
+
+const workerResetPasswordValidationSchema = z.object({
+  body: z.object({
+    contactNumber: z.string({
+      required_error: 'User contact number is required!',
     }),
     newPassword: z
       .string({
@@ -99,7 +127,9 @@ export const AuthValidation = {
   changePasswordValidationSchema,
   refreshTokenValidationSchema,
   forgetPasswordValidationSchema,
+  workerForgetPasswordValidationSchema,
   resetPasswordValidationSchema,
   googleZodValidationSchema,
   facebookZodValidationSchema,
+  workerResetPasswordValidationSchema,
 }

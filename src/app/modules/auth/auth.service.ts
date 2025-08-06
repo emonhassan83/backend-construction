@@ -590,6 +590,72 @@ const workerAccForgetPassword = async (payload: { contactNumber: string }) => {
   return { verifyToken: resetToken }
 }
 
+const workerResetPassword = async (
+  payload: { contactNumber: string; newPassword: string; confirmPassword: string },
+  token: string,
+) => {
+  //* checking if the user is exist
+  const user = await User.isUserExistsByEmail(payload?.contactNumber)
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
+  }
+
+  // if session is expired
+  if (new Date() > user!.verification!.expiresAt!) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Session has expired')
+  }
+
+  // if user verification status is not available
+  if (!user?.verification?.status) {
+    throw new AppError(httpStatus.FORBIDDEN, 'OTP is not verified yet')
+  }
+
+  const decoded = verifyToken(token, config.jwt_access_secret as string)
+  // if (payload.contactNumber !== decoded.email) {
+  //   throw new AppError(httpStatus.FORBIDDEN, 'You are forbidden!')
+  // }
+
+  // if new password and confirm Password is not match
+  if (payload?.newPassword !== payload?.confirmPassword) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'New password and confirm password do not match',
+    )
+  }
+
+  //* hash new password
+  const newHashedPassword = await bcrypt.hash(
+    payload.newPassword,
+    Number(config.bcrypt_salt_rounds),
+  )
+
+  const passwordResetUser = await User.findOneAndUpdate(
+    {
+      _id: decoded._id,
+      role: decoded.role,
+    },
+    {
+      $set: {
+        password: newHashedPassword,
+        passwordChangedAt: new Date(),
+        verification: {
+          otp: 0,
+          status: true,
+        },
+      },
+    },
+    { new: true },
+  )
+
+  //if password is not updated throw error
+  if (!passwordResetUser) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Password was not reset. Please try again!',
+    )
+  }
+}
+
 const resetPassword = async (
   payload: { email: string; newPassword: string; confirmPassword: string },
   token: string,
@@ -669,4 +735,5 @@ export const AuthServices = {
   workerAccForgetPassword,
   forgetPassword,
   resetPassword,
+  workerResetPassword
 }
