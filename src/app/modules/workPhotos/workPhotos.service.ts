@@ -5,6 +5,35 @@ import { TWorkPhoto } from './workPhotos.interface'
 import { WorkPhoto } from './workPhotos.model'
 import { User } from '../user/user.model'
 import { uploadToS3 } from '../../utils/s3'
+import cron from 'node-cron'
+import { subDays } from 'date-fns'
+
+export const scheduleOldWorkImageCleanup = () => {
+  cron.schedule('0 2 * * *', async () => {
+    try {
+      const thresholdDate = subDays(new Date(), 30); 
+
+      const oldImages = await WorkPhoto.find({
+        createdAt: { $lt: thresholdDate },
+        isDeleted: false,
+      });
+
+      if (oldImages.length === 0) {
+        console.log('[CRON] 📭 No old images found for deletion.');
+        return;
+      }
+
+      // Assign Delete function to each old image]
+      const result = await WorkPhoto.deleteMany({
+        _id: { $in: oldImages.map(img => img._id) },
+      });
+
+      console.log(`[CRON] ✅ Deleted ${result.deletedCount} old work images.`);
+    } catch (error) {
+      console.error('[CRON] ❌ Error deleting old work images:', error);
+    }
+  });
+};
 
 const createWorkPhotoIntoDB = async (payload: TWorkPhoto, file: any) => {
   const { author: userId, company: companyId, latitude, longitude } = payload
