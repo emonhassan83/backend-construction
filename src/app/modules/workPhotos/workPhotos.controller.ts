@@ -4,7 +4,7 @@ import sendResponse from '../../utils/sendResponse'
 import { WorkPhotoService } from './workPhotos.service'
 
 const createWorkPhoto = catchAsync(async (req, res) => {
-  const result = await WorkPhotoService.createWorkPhotoIntoDB(req.body)
+  const result = await WorkPhotoService.createWorkPhotoIntoDB(req.body, req.file)
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -26,11 +26,22 @@ const getAllWorkPhotos = catchAsync(async (req, res) => {
   })
 })
 
+const getAllWorkersWorkPhotos = catchAsync(async (req, res) => {
+  req.query['author'] = req.params.workerId
+  const result = await WorkPhotoService.getAllWorkPhotosFromDB(req.query)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'All Work photos retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  })
+})
+
 const getMyWorkPhotos = catchAsync(async (req, res) => {
   req.query['author'] = req.user._id
-  const result = await WorkPhotoService.getAllWorkPhotosFromDB(
-    req.user._id,
-  )
+  const result = await WorkPhotoService.getAllWorkPhotosFromDB(req.query)
 
   sendResponse(res, {
     success: true,
@@ -43,9 +54,7 @@ const getMyWorkPhotos = catchAsync(async (req, res) => {
 
 const getCompanyWorkPhotos = catchAsync(async (req, res) => {
   req.query['company'] = req.params.companyId
-  const result = await WorkPhotoService.getAllWorkPhotosFromDB(
-    req.user._id,
-  )
+  const result = await WorkPhotoService.getAllWorkPhotosFromDB(req.query)
 
   sendResponse(res, {
     success: true,
@@ -57,9 +66,7 @@ const getCompanyWorkPhotos = catchAsync(async (req, res) => {
 })
 
 const getAWorkPhoto = catchAsync(async (req, res) => {
-  const result = await WorkPhotoService.getAWorkPhotosFromDB(
-    req.params.id,
-  )
+  const result = await WorkPhotoService.getAWorkPhotosFromDB(req.params.id)
 
   sendResponse(res, {
     success: true,
@@ -73,6 +80,7 @@ const updateWorkPhoto = catchAsync(async (req, res) => {
   const result = await WorkPhotoService.updateWorkPhotoFromDB(
     req.params.id,
     req.body,
+    req.file
   )
 
   sendResponse(res, {
@@ -84,9 +92,7 @@ const updateWorkPhoto = catchAsync(async (req, res) => {
 })
 
 const deleteAWorkPhoto = catchAsync(async (req, res) => {
-  const result = await WorkPhotoService.deleteAWorkPhotoFromDB(
-    req.params.id,
-  )
+  const result = await WorkPhotoService.deleteAWorkPhotoFromDB(req.params.id)
 
   sendResponse(res, {
     success: true,
@@ -99,6 +105,7 @@ const deleteAWorkPhoto = catchAsync(async (req, res) => {
 export const WorkPhotoControllers = {
   createWorkPhoto,
   getAllWorkPhotos,
+  getAllWorkersWorkPhotos,
   getMyWorkPhotos,
   getCompanyWorkPhotos,
   getAWorkPhoto,

@@ -8,7 +8,7 @@ export type TWorkPhoto = {
   latitude: number
   longitude: number
   location: string
-  locationURL: string
+  locationUrl: string
   isDeleted: boolean
 }
 

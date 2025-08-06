@@ -4,12 +4,18 @@ import auth from '../../middleware/auth'
 import { USER_ROLE } from '../user/user.constant'
 import { WorkPhotoControllers } from './workPhotos.controller'
 import { WorkPhotoValidation } from './workPhotos.validation'
+import multer, { memoryStorage } from 'multer'
+import parseData from '../../middleware/parseData'
 
 const router = express.Router()
+const storage = memoryStorage()
+const upload = multer({ storage })
 
 router.post(
   '/',
   auth(USER_ROLE.worker),
+  upload.single('image'),
+  parseData(),
   zodValidationRequest(WorkPhotoValidation.createValidationSchema),
   WorkPhotoControllers.createWorkPhoto,
 )
@@ -17,6 +23,8 @@ router.post(
 router.put(
   '/:id',
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
+  upload.single('image'),
+  parseData(),
   WorkPhotoControllers.updateWorkPhoto,
 )
 
@@ -33,9 +41,15 @@ router.get(
 )
 
 router.get(
-  '/companies-works-photos',
+  '/companies/:companyId',
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
   WorkPhotoControllers.getCompanyWorkPhotos,
+)
+
+router.get(
+  '/worker/:workerId',
+  auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
+  WorkPhotoControllers.getAllWorkersWorkPhotos,
 )
 
 router.get(

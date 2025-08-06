@@ -4,9 +4,10 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { TWorkPhoto } from './workPhotos.interface'
 import { WorkPhoto } from './workPhotos.model'
 import { User } from '../user/user.model'
+import { uploadToS3 } from '../../utils/s3'
 
-const createWorkPhotoIntoDB = async (payload: TWorkPhoto) => {
-  const { author: userId, company: companyId } = payload
+const createWorkPhotoIntoDB = async (payload: TWorkPhoto, file: any) => {
+  const { author: userId, company: companyId, latitude, longitude } = payload
 
   // Validate user
   const user = await User.findById(userId)
@@ -15,6 +16,28 @@ const createWorkPhotoIntoDB = async (payload: TWorkPhoto) => {
   }
   if (user.status === 'blocked') {
     throw new AppError(httpStatus.FORBIDDEN, 'Your account is blocked!')
+  }
+
+  // Validate Company
+  const company = await User.findById(companyId)
+  if (!company || company.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
+  }
+  if (company.status === 'blocked') {
+    throw new AppError(httpStatus.FORBIDDEN, 'Company account is blocked!')
+  }
+
+  // upload to service image
+  if (file) {
+    payload.image = (await uploadToS3({
+      file,
+      fileName: `images/service/${Math.floor(100000 + Math.random() * 900000)}`,
+    })) as string
+  }
+
+  // save location url
+  if (latitude && longitude) {
+    payload.locationUrl = `https://www.google.com/maps?q=${payload.latitude},${payload.longitude}`
   }
 
   // Create with calculated values
@@ -46,6 +69,7 @@ const getAllWorkPhotosFromDB = async (query: Record<string, unknown>) => {
 const getAWorkPhotosFromDB = async (id: string) => {
   const workPhoto = await WorkPhoto.findById(id).populate([
     { path: 'author', select: 'name email photoUrl' },
+    { path: 'company', select: 'name email photoUrl' },
   ])
   if (!workPhoto || workPhoto?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
@@ -56,10 +80,23 @@ const getAWorkPhotosFromDB = async (id: string) => {
 const updateWorkPhotoFromDB = async (
   id: string,
   payload: Partial<TWorkPhoto>,
+  file?: any,
 ) => {
   const workPhoto = await WorkPhoto.findById(id)
   if (!workPhoto || workPhoto?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
+  }
+
+  // upload to service image
+  if (file) {
+    payload.image = (await uploadToS3({
+      file,
+      fileName: `images/service/${Math.floor(100000 + Math.random() * 900000)}`,
+    })) as string
+  }
+
+  if (payload.latitude && payload.longitude) {
+    payload.locationUrl = `https://www.google.com/maps?q=${payload.latitude},${payload.longitude}`
   }
 
   const updatedWorkPhoto = await WorkPhoto.findByIdAndUpdate(id, payload, {
@@ -96,10 +133,7 @@ const deleteAWorkPhotoFromDB = async (id: string) => {
   )
 
   if (!result) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      'Work Photo record Delete failed',
-    )
+    throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record Delete failed')
   }
 
   return result

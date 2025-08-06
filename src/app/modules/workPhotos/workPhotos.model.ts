@@ -9,7 +9,7 @@ const workPhotosSchema = new Schema<TWorkPhoto>(
     latitude: { type: Number, required: true },
     longitude: { type: Number, required: true },
     location: { type: String, required: true },
-    locationURL: { type: String, required: false },
+    locationUrl: { type: String, required: false },
     isDeleted: { type: Boolean, default: false },
   },
   {
