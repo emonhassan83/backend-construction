@@ -8,6 +8,7 @@ import { User } from '../user/user.model'
 import {
   authNotifyUser,
   createToken,
+  createWorkerToken,
   TExpiresIn,
   verifyToken,
 } from './auth.utils'
@@ -16,6 +17,7 @@ import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
 import { REGISTER_WITH } from '../user/user.constant'
 import { TUser } from '../user/user.interface'
+import { sendMobileSms } from '../../utils/smsSender'
 
 const loginUser = async (payload: TLoginUser) => {
   //* checking if the user is exist
@@ -50,6 +52,54 @@ const loginUser = async (payload: TLoginUser) => {
   )
 
   const refreshToken = createToken(
+    jwtPayload,
+    config.jwt_refresh_secret as string,
+    config.jwt_refresh_expires_in as TExpiresIn,
+  )
+
+  // save FCM token if provided
+  if (payload.fcmToken) {
+    await User.findByIdAndUpdate(user._id, {
+      fcmToken: payload.fcmToken,
+    })
+  }
+
+  return {
+    accessToken,
+    refreshToken,
+  }
+}
+
+const loginWorker = async (payload: TLoginUser) => {
+  //* checking if the user is exist
+  const user = await User.isUserExistsByEmail(payload.email)
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
+  }
+
+  //* checking if the password is correct
+  if (!(await User.isPasswordMatched(payload?.password, user?.password)))
+    throw new AppError(httpStatus.FORBIDDEN, 'Password do not matched')
+
+  // if user is not verify yet throw error
+  if (!user?.verification?.status) {
+    throw new AppError(httpStatus.FORBIDDEN, 'User account is not verified')
+  }
+
+  //* create token and sent to the  client
+  const jwtPayload = {
+    _id: user._id,
+    username: user.username,
+    role: user.role,
+  }
+
+  const accessToken = createWorkerToken(
+    jwtPayload,
+    config.jwt_access_secret as string,
+    config.jwt_access_expires_in as TExpiresIn,
+  )
+
+  const refreshToken = createWorkerToken(
     jwtPayload,
     config.jwt_refresh_secret as string,
     config.jwt_refresh_expires_in as TExpiresIn,
@@ -494,6 +544,52 @@ const forgetPassword = async (payload: { email: string }) => {
   return { verifyToken: resetToken }
 }
 
+const workerAccForgetPassword = async (payload: { contactNumber: string }) => {
+  const user = await User.isUserExistsByUserContactNumber(payload.contactNumber)
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
+  }
+
+  //* create token and sent to the  client
+  const jwtPayload = {
+    _id: user._id,
+    username: user.username,
+    role: user.role,
+  }
+
+  const resetToken = createWorkerToken(
+    jwtPayload,
+    config.jwt_access_secret as string,
+    '5m',
+  )
+
+  const currentTime = new Date()
+  const otp = generateOtp()
+  const expiresAt = moment(currentTime).add(5, 'minute')
+
+  await User.findByIdAndUpdate(user?._id, {
+    verification: {
+      otp,
+      expiresAt,
+    },
+  })
+
+   // ✅ Send OTP via SMS
+  await sendMobileSms({
+    recipients: [
+      {
+        mobiles: payload.contactNumber,
+        VAR1: otp, // your SMS template should use VAR1 as OTP placeholder
+        VAR2: '5 minutes', // optional, based on your template
+      },
+    ],
+    short_url: '0',
+    realTimeResponse: '1',
+  })
+
+  return { verifyToken: resetToken }
+}
+
 const resetPassword = async (
   payload: { email: string; newPassword: string; confirmPassword: string },
   token: string,
@@ -565,10 +661,12 @@ const resetPassword = async (
 
 export const AuthServices = {
   loginUser,
+  loginWorker,
   registerWithGoogle,
   registerWithFacebook,
   changePassword,
   refreshToken,
+  workerAccForgetPassword,
   forgetPassword,
   resetPassword,
 }

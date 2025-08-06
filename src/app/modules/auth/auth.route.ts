@@ -14,6 +14,12 @@ router.post(
 )
 
 router.post(
+  '/login-worker',
+  validateRequest(AuthValidation.vendorLoginValidationSchema),
+  AuthControllers.loginWorker,
+)
+
+router.post(
   '/google',
   validateRequest(AuthValidation.googleZodValidationSchema),
   AuthControllers.registerWithGoogle,

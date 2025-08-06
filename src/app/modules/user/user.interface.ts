@@ -8,7 +8,7 @@ export interface TUser {
   username: string
   email: string
   password: string
-  fcmToken: string,
+  fcmToken: string
   companyName: string
   contactNumber: string
   photoUrl?: string
@@ -22,7 +22,7 @@ export interface TUser {
     status: boolean
   }
   status: TUserStatus
-  expireAt: Date
+  expireAt: Date | null
   isDeleted: boolean
   createdAt?: Date
   updatedAt?: Date
@@ -38,6 +38,7 @@ export interface TReqUser {
 
 export interface UserModel extends Model<TUser> {
   isUserExistsByUserName(name: string): Promise<TUser>
+  isUserExistsByUserContactNumber(name: string): Promise<TUser>
   isUserExistsByEmail(email: string): Promise<TUser>
 
   isPasswordMatched(

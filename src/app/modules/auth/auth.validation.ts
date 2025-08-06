@@ -13,6 +13,19 @@ const loginValidationSchema = z.object({
   }),
 })
 
+const vendorLoginValidationSchema = z.object({
+  body: z.object({
+    username: z.string(),
+    password: z
+      .string({
+        invalid_type_error: 'Password must be a string',
+      })
+      .min(6, { message: 'Password must be at least 6 characters' })
+      .max(12, { message: 'Password cannot be more than 12 characters' }),
+      fcmToken: z.string().optional(),
+  }),
+})
+
 const changePasswordValidationSchema = z.object({
   body: z.object({
     oldPassword: z
@@ -82,6 +95,7 @@ const resetPasswordValidationSchema = z.object({
 
 export const AuthValidation = {
   loginValidationSchema,
+  vendorLoginValidationSchema,
   changePasswordValidationSchema,
   refreshTokenValidationSchema,
   forgetPasswordValidationSchema,

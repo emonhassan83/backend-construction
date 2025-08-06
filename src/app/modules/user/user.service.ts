@@ -3,7 +3,7 @@ import AppError from '../../errors/AppError'
 import { TUser } from './user.interface'
 import { User } from './user.model'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { UserSearchableFields } from './user.constant'
+import { USER_ROLE, UserSearchableFields } from './user.constant'
 import { sendUserStatusNotifYToAdmin, sendUserStatusNotifYToUser } from './user.utils'
 
 const registerUserIntoDB = async (payload: TUser) => {
@@ -48,10 +48,65 @@ const registerUserIntoDB = async (payload: TUser) => {
   return newUser
 }
 
+const addAWorkerIntoDB = async (payload: TUser) => {
+  if (payload.role === 'admin') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You cannot directly assign admin role',
+    );
+  }
+
+  // 🟡 Prepare final payload with default values if worker
+  const userPayload = {
+    ...payload,
+    ...(payload.role === USER_ROLE.worker && {
+      verification: {
+        otp: '0',
+        status: true,
+      },
+      expireAt: null,
+    }),
+  };
+
+  const existingUser = await User.findOne({ email: userPayload.email });
+
+  if (existingUser) {
+    // 🟡 Soft deleted user — recreate
+    if (existingUser.isDeleted) {
+      existingUser.set({ ...userPayload, isDeleted: false });
+      const user = await existingUser.save();
+      return user;
+    }
+
+    // 🟡 Unverified user — update fields and re-save
+    if (!existingUser.verification?.status) {
+      existingUser.set({ ...userPayload });
+      const user = await existingUser.save();
+      return user;
+    }
+
+    // 🔴 Already active user
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'User already exists with this email',
+    );
+  }
+
+  // 🟢 New user
+  if (!userPayload.password) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Password is required');
+  }
+
+  const newUser = new User(userPayload);
+  await newUser.save();
+
+  return newUser;
+};
+
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
     User.find({ isDeleted: false }).select(
-      '_id id name email photoUrl contactNumber',
+      '_id id name email photoUrl companyName status createdAt',
     ),
     query,
   )
@@ -76,7 +131,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findOne({ _id: id }).select(
-    '_id id name email photoUrl contactNumber status createdAt',
+    '_id id name username email photoUrl contactNumber status createdAt',
   )
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
@@ -180,6 +235,7 @@ const deleteAUserFromDB = async (userId: string) => {
 
 export const UserService = {
   registerUserIntoDB,
+  addAWorkerIntoDB,
   getAllUsersFromDB,
   geUserByIdFromDB,
   changeUserStatusFromDB,

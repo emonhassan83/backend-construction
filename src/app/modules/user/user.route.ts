@@ -19,6 +19,14 @@ router.post(
   UserControllers.registerUser,
 )
 
+router.post(
+  '/add-worker',
+  upload.single('image'),
+  parseData(),
+  zodValidationRequest(UserValidation.createValidationSchema),
+  UserControllers.registerUser,
+)
+
 router.patch(
   '/change-status',
   auth(USER_ROLE.admin),

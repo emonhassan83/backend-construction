@@ -40,7 +40,7 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     contactNumber: {
       type: String,
-      required: true,
+      required: true
     },
     companyName: {
       type: String,
@@ -117,6 +117,13 @@ userSchema.pre('save', async function (next) {
   }
   next()
 })
+
+//* Static method to check if user exists by contactNumber
+userSchema.statics.isUserExistsByUserContactNumber = async function (
+  contactNumber: string,
+): Promise<TUser | null> {
+  return await this.findOne({ contactNumber })
+}
 
 //* Static method to check if user exists by email
 userSchema.statics.isUserExistsByEmail = async function (

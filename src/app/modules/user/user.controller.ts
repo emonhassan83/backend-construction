@@ -30,6 +30,28 @@ const registerUser = catchAsync(async (req, res) => {
   })
 })
 
+const addAWorker = catchAsync(async (req, res) => {
+  if (req?.file) {
+    req.body.photoUrl = await uploadToS3({
+      file: req.file,
+      fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
+    })
+  }
+  // console.log('payload: ', req.body)
+
+  const result = await UserService.addAWorkerIntoDB(req?.body)
+  const { _id, id, name, photoUrl, username, contactNumber } = result
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'User registered successfully!',
+    data: { _id, id, name, username, photoUrl, contactNumber },
+     
+    
+  })
+})
+
 const getAllUsers = catchAsync(async (req, res) => {
   const result = await UserService.getAllUsersFromDB(req.query)
 
@@ -128,6 +150,7 @@ const deleteAUser = catchAsync(async (req, res) => {
 
 export const UserControllers = {
   registerUser,
+  addAWorker,
   getAllUsers,
   getUserById,
   getMyProfile,

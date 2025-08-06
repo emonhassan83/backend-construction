@@ -34,4 +34,5 @@ export default {
     region: process.env.AWS_REGION,
     bucket: process.env.AWS_BUCKET_NAME,
   },
+ sms_auth_key: process.env.SMS_AUTH_KEY,
 }
