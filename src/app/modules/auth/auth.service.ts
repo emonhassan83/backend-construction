@@ -12,7 +12,7 @@ import {
   TExpiresIn,
   verifyToken,
 } from './auth.utils'
-import { TLoginUser } from './auth.interface'
+import { TLoginUser, TLoginWorker } from './auth.interface'
 import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
 import { REGISTER_WITH } from '../user/user.constant'
@@ -70,9 +70,9 @@ const loginUser = async (payload: TLoginUser) => {
   }
 }
 
-const loginWorker = async (payload: TLoginUser) => {
+const loginWorker = async (payload: TLoginWorker) => {
   //* checking if the user is exist
-  const user = await User.isUserExistsByEmail(payload.email)
+  const user = await User.isUserExistsByUserContactNumber(payload.contactNumber)
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
   }
@@ -89,7 +89,7 @@ const loginWorker = async (payload: TLoginUser) => {
   //* create token and sent to the  client
   const jwtPayload = {
     _id: user._id,
-    username: user.username,
+    contactNumber: user.contactNumber,
     role: user.role,
   }
 
@@ -553,7 +553,7 @@ const workerAccForgetPassword = async (payload: { contactNumber: string }) => {
   //* create token and sent to the  client
   const jwtPayload = {
     _id: user._id,
-    username: user.username,
+    contactNumber: user.contactNumber,
     role: user.role,
   }
 
@@ -611,9 +611,9 @@ const workerResetPassword = async (
   }
 
   const decoded = verifyToken(token, config.jwt_access_secret as string)
-  // if (payload.contactNumber !== decoded.email) {
-  //   throw new AppError(httpStatus.FORBIDDEN, 'You are forbidden!')
-  // }
+  if (payload.contactNumber !== decoded.contactNumber) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You are forbidden!')
+  }
 
   // if new password and confirm Password is not match
   if (payload?.newPassword !== payload?.confirmPassword) {

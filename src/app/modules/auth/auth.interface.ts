@@ -10,3 +10,9 @@ export interface TLoginUser {
   password: string
   fcmToken?: string 
 }
+
+export interface TLoginWorker {
+  contactNumber: string
+  password: string
+  fcmToken?: string 
+}
