@@ -60,7 +60,7 @@ const createWorkPhotoIntoDB = async (payload: TWorkPhoto, file: any) => {
   if (file) {
     payload.image = (await uploadToS3({
       file,
-      fileName: `images/service/${Math.floor(100000 + Math.random() * 900000)}`,
+      fileName: `images/work-photos/${user?.name}/${Math.floor(100000 + Math.random() * 900000)}`,
     })) as string
   }
 
@@ -116,11 +116,16 @@ const updateWorkPhotoFromDB = async (
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
   }
 
+  const user = await User.findById(workPhoto.author)
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+  }
+
   // upload to service image
   if (file) {
     payload.image = (await uploadToS3({
       file,
-      fileName: `images/service/${Math.floor(100000 + Math.random() * 900000)}`,
+      fileName: `images/work-photos/${user?.name}/${Math.floor(100000 + Math.random() * 900000)}`,
     })) as string
   }
 
