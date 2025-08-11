@@ -9,16 +9,10 @@ const createValidationSchema = z.object({
     }),
     username: z.string({
       required_error: 'User name is required!',
-    }),
+    }).optional(),
     email: z.string({
       required_error: 'Email is required!',
     }),
-    password: z
-      .string({
-        invalid_type_error: 'Password must be a string',
-      })
-      .min(6, { message: 'Password must be at least 6 characters' })
-      .max(12, { message: 'Password cannot be more than 12 characters' }),
     contactNumber: z.string({
       required_error: 'Contact number is required!',
     }),

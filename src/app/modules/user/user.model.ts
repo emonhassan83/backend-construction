@@ -20,11 +20,12 @@ const userSchema = new Schema<TUser, UserModel>(
     name: {
       type: String,
       required: true,
+      unique: true,
+      sparse: true,
     },
     username: {
       type: String,
-      required: true,
-      unique: true,
+      default: null,
     },
     email: {
       type: String,
@@ -33,14 +34,15 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     password: {
       type: String,
-      required: true,
+      required: false,
     },
     fcmToken: {
-      type: String
+      type: String,
     },
     contactNumber: {
       type: String,
-      required: true
+      required: true,
+      unique: true,
     },
     companyName: {
       type: String,

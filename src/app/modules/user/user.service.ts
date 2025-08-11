@@ -10,6 +10,7 @@ import {
 } from './user.utils'
 import { generateCryptoString } from '../../utils/generateCryptoString'
 import emailSender from '../../utils/emailSender'
+import { generateUniqueUsername } from '../../utils/generateUserName'
 
 const addACompanyIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -19,10 +20,17 @@ const addACompanyIntoDB = async (payload: TUser) => {
     )
   }
 
+  // Auto-generate username if not provided
+  if (!payload.username) {
+    payload.username = await generateUniqueUsername(
+      payload.name || payload.email,
+    )
+  }
+
   // 🟡 Prepare final payload with default values if worker
   const userPayload = {
     ...payload,
-    ...(payload.role === USER_ROLE.worker && {
+    ...({
       verification: {
         otp: '0',
         status: true,
@@ -54,13 +62,13 @@ const addACompanyIntoDB = async (payload: TUser) => {
     )
   }
 
+  userPayload.role = USER_ROLE.project_manager // Ensure role is set to company
+  userPayload.password = generateCryptoString(12)
+
   // 🟢 New user
   if (!userPayload.password) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
   }
-
-  userPayload.role = USER_ROLE.project_manager // Ensure role is set to company
-  userPayload.password = generateCryptoString(12)
 
   const newUser = new User(userPayload)
   await newUser.save()
@@ -101,7 +109,7 @@ const addAWorkerIntoDB = async (payload: TUser) => {
   // 🟡 Prepare final payload with default values if worker
   const userPayload = {
     ...payload,
-    ...(payload.role === USER_ROLE.worker && {
+    ...({
       verification: {
         otp: '0',
         status: true,
