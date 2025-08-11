@@ -60,6 +60,12 @@ router.delete(
 )
 
 router.get(
+  '/company/:companyId',
+  auth(USER_ROLE.admin, USER_ROLE.project_manager),
+  UserControllers.getUsersByCompany,
+)
+
+router.get(
   '/my-profile',
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
   UserControllers.getMyProfile,

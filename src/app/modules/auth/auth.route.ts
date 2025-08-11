@@ -15,7 +15,7 @@ router.post(
 
 router.post(
   '/worker/login',
-  validateRequest(AuthValidation.vendorLoginValidationSchema),
+  validateRequest(AuthValidation.workerLoginValidationSchema),
   AuthControllers.loginWorker,
 )
 

@@ -7,4 +7,10 @@ const router = express.Router()
 
 router.get('/', auth(USER_ROLE.admin), MetaController.fetchDashboardMetaData)
 
+router.get(
+  '/company',
+  auth(USER_ROLE.project_manager),
+  MetaController.fetchCompanyDashboardMetaData,
+)
+
 export const MetaRoutes = router

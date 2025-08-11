@@ -14,6 +14,18 @@ const fetchDashboardMetaData = catchAsync(async (req, res) => {
   })
 })
 
+const fetchCompanyDashboardMetaData = catchAsync(async (req, res) => {
+  const result = await MetaService.fetchCompanyDashboardMetaData(req.user, req.query)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Company meta data retrieval successfully!',
+    data: result,
+  })
+})
+
 export const MetaController = {
   fetchDashboardMetaData,
+  fetchCompanyDashboardMetaData
 }

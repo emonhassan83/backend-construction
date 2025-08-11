@@ -13,9 +13,9 @@ const loginValidationSchema = z.object({
   }),
 })
 
-const vendorLoginValidationSchema = z.object({
+const workerLoginValidationSchema = z.object({
   body: z.object({
-    username: z.string(),
+    contactNumber: z.string(),
     password: z
       .string({
         invalid_type_error: 'Password must be a string',
@@ -123,7 +123,7 @@ const workerResetPasswordValidationSchema = z.object({
 
 export const AuthValidation = {
   loginValidationSchema,
-  vendorLoginValidationSchema,
+  workerLoginValidationSchema,
   changePasswordValidationSchema,
   refreshTokenValidationSchema,
   forgetPasswordValidationSchema,

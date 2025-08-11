@@ -12,7 +12,7 @@ const createValidationSchema = z.object({
     }).optional(),
     email: z.string({
       required_error: 'Email is required!',
-    }),
+    }).optional(),
     contactNumber: z.string({
       required_error: 'Contact number is required!',
     }),

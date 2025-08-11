@@ -29,7 +29,7 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     email: {
       type: String,
-      required: true,
+      required: false,
       unique: true,
     },
     password: {
@@ -44,10 +44,7 @@ const userSchema = new Schema<TUser, UserModel>(
       required: true,
       unique: true,
     },
-    companyName: {
-      type: String,
-      default: null,
-    },
+    company: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     photoUrl: {
       type: String,
       default: null,

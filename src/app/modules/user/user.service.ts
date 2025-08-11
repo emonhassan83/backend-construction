@@ -11,6 +11,7 @@ import {
 import { generateCryptoString } from '../../utils/generateCryptoString'
 import emailSender from '../../utils/emailSender'
 import { generateUniqueUsername } from '../../utils/generateUserName'
+import path from 'path'
 
 const addACompanyIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -30,13 +31,13 @@ const addACompanyIntoDB = async (payload: TUser) => {
   // 🟡 Prepare final payload with default values if worker
   const userPayload = {
     ...payload,
-    ...({
+    ...{
       verification: {
         otp: '0',
         status: true,
       },
       expireAt: null,
-    }),
+    },
   }
 
   const existingUser = await User.findOne({ email: userPayload.email })
@@ -109,13 +110,13 @@ const addAWorkerIntoDB = async (payload: TUser) => {
   // 🟡 Prepare final payload with default values if worker
   const userPayload = {
     ...payload,
-    ...({
+    ...{
       verification: {
         otp: '0',
         status: true,
       },
       expireAt: null,
-    }),
+    },
   }
 
   const existingUser = await User.findOne({ email: userPayload.email })
@@ -155,9 +156,11 @@ const addAWorkerIntoDB = async (payload: TUser) => {
 
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
-    User.find({ isDeleted: false }).select(
-      '_id id name email photoUrl companyName status createdAt',
-    ),
+    User.find({ isDeleted: false })
+      .select(
+        '_id id name email username photoUrl contactNumber company status createdAt',
+      )
+      .populate([{ path: 'company', select: 'name' }]),
     query,
   )
     .search(UserSearchableFields)
@@ -180,9 +183,11 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 }
 
 const geUserByIdFromDB = async (id: string) => {
-  const user = await User.findOne({ _id: id }).select(
-    '_id id name username email photoUrl contactNumber status createdAt',
-  )
+  const user = await User.findOne({ _id: id })
+    .select(
+      '_id id name username email photoUrl contactNumber company status createdAt',
+    )
+    .populate([{ path: 'company', select: 'name' }])
   if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }

@@ -9,7 +9,7 @@ export interface TUser {
   email: string
   password: string
   fcmToken: string
-  companyName: string
+  company: Types.ObjectId | null
   contactNumber: string
   photoUrl?: string
   role: TUserRole
