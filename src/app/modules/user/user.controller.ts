@@ -4,29 +4,23 @@ import sendResponse from '../../utils/sendResponse'
 import { UserService } from './user.service'
 import { Request, Response } from 'express'
 import { uploadToS3 } from '../../utils/s3'
-import { otpServices } from '../otp/otp.service'
 
-const registerUser = catchAsync(async (req, res) => {
+const addACompany = catchAsync(async (req, res) => {
   if (req?.file) {
     req.body.photoUrl = await uploadToS3({
       file: req.file,
       fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
     })
   }
-  // console.log('payload: ', req.body)
 
-  const result = await UserService.registerUserIntoDB(req?.body)
-  const sendOtp = await otpServices.resendOtp(result?.email)
+  const result = await UserService.addACompanyIntoDB(req?.body)
   const { _id, id, name, email, photoUrl, contactNumber } = result
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
-    message: 'User registered successfully!',
-    data: {
-      user: { _id, id, name, email, photoUrl, contactNumber },
-      otpToken: sendOtp,
-    },
+    message: 'Add a company successfully!',
+    data: { _id, id, name, email, photoUrl, contactNumber },
   })
 })
 
@@ -37,7 +31,6 @@ const addAWorker = catchAsync(async (req, res) => {
       fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
     })
   }
-  // console.log('payload: ', req.body)
 
   const result = await UserService.addAWorkerIntoDB(req?.body)
   const { _id, id, name, photoUrl, username, contactNumber } = result
@@ -45,10 +38,8 @@ const addAWorker = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
-    message: 'User registered successfully!',
+    message: 'Add a worker successfully!',
     data: { _id, id, name, username, photoUrl, contactNumber },
-     
-    
   })
 })
 
@@ -149,7 +140,7 @@ const deleteAUser = catchAsync(async (req, res) => {
 })
 
 export const UserControllers = {
-  registerUser,
+  addACompany,
   addAWorker,
   getAllUsers,
   getUserById,

@@ -12,19 +12,21 @@ const storage = memoryStorage()
 const upload = multer({ storage })
 
 router.post(
-  '/register',
+  '/add-company',
   upload.single('image'),
   parseData(),
+  auth(USER_ROLE.admin),
   zodValidationRequest(UserValidation.createValidationSchema),
-  UserControllers.registerUser,
+  UserControllers.addACompany,
 )
 
 router.post(
   '/add-worker',
   upload.single('image'),
   parseData(),
+  auth(USER_ROLE.project_manager),
   zodValidationRequest(UserValidation.createValidationSchema),
-  UserControllers.registerUser,
+  UserControllers.addAWorker,
 )
 
 router.patch(
