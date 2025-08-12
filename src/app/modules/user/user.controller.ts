@@ -68,6 +68,19 @@ const getUsersByCompany = catchAsync(async (req, res) => {
   })
 })
 
+const getCompanyWorkerUpload = catchAsync(async (req, res) => {
+  req.query['company'] = req.params.companyId
+  const result = await UserService.getCompanyWorkerUploadFromDB(req.query)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Company work upload retrieved successfully!',
+    meta: result.meta,
+    data: result.result,
+  })
+})
+
 const getUserById = catchAsync(async (req: Request, res: Response) => {
   const result = await UserService.geUserByIdFromDB(req.params.id)
   sendResponse(res, {
@@ -157,6 +170,7 @@ export const UserControllers = {
   addAWorker,
   getAllUsers,
   getUsersByCompany,
+  getCompanyWorkerUpload,
   getUserById,
   getMyProfile,
   changeUserStatus,

@@ -11,7 +11,6 @@ import {
 import { generateCryptoString } from '../../utils/generateCryptoString'
 import emailSender from '../../utils/emailSender'
 import { generateUniqueUsername } from '../../utils/generateUserName'
-import path from 'path'
 
 const addACompanyIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -182,6 +181,32 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   }
 }
 
+const getCompanyWorkerUploadFromDB = async (query: Record<string, unknown>) => {
+  const usersQuery = new QueryBuilder(
+    User.find({ isDeleted: false }).select(
+      '_id id name username photoUrl contactNumber status createdAt',
+    ),
+    query,
+  )
+    .search(UserSearchableFields)
+    .filter()
+    .sort()
+    .paginate()
+    .fields()
+
+  const result = await usersQuery.modelQuery
+  const meta = await usersQuery.countTotal()
+
+  if (!usersQuery) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Users not found!')
+  }
+
+  return {
+    meta,
+    result,
+  }
+}
+
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findOne({ _id: id })
     .select(
@@ -293,6 +318,7 @@ export const UserService = {
   addAWorkerIntoDB,
   getAllUsersFromDB,
   geUserByIdFromDB,
+  getCompanyWorkerUploadFromDB,
   changeUserStatusFromDB,
   updateUserInfoFromDB,
   deleteAUserFromDB,
