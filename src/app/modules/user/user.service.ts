@@ -11,6 +11,7 @@ import {
 import { generateCryptoString } from '../../utils/generateCryptoString'
 import emailSender from '../../utils/emailSender'
 import { generateUniqueUsername } from '../../utils/generateUserName'
+import { WorkPhoto } from '../workPhotos/workPhotos.model'
 
 const addACompanyIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -184,7 +185,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 const getCompanyWorkerUploadFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
     User.find({ isDeleted: false }).select(
-      '_id id name username photoUrl contactNumber status createdAt',
+      '_id id name username photoUrl contactNumber status createdAt'
     ),
     query,
   )
@@ -197,13 +198,20 @@ const getCompanyWorkerUploadFromDB = async (query: Record<string, unknown>) => {
   const result = await usersQuery.modelQuery
   const meta = await usersQuery.countTotal()
 
-  if (!usersQuery) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Users not found!')
-  }
+  // 🔹 Fetch total uploads for each user
+  const resultsWithUploads = await Promise.all(
+    result.map(async (user: any) => {
+      const totalUpload = await WorkPhoto.countDocuments({
+        author: user._id,
+        isDeleted: false,
+      })
+      return { ...user.toObject(), totalUpload }
+    })
+  )
 
   return {
     meta,
-    result,
+    result: resultsWithUploads,
   }
 }
 

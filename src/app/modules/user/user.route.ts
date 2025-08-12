@@ -60,6 +60,12 @@ router.delete(
 )
 
 router.get(
+  '/company-worker-upload/:companyId',
+  auth(USER_ROLE.admin, USER_ROLE.project_manager),
+  UserControllers.getCompanyWorkerUpload,
+)
+
+router.get(
   '/company/:companyId',
   auth(USER_ROLE.admin, USER_ROLE.project_manager),
   UserControllers.getUsersByCompany,

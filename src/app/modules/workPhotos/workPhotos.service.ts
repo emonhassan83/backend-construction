@@ -99,7 +99,7 @@ const getAWorkPhotosFromDB = async (id: string) => {
   const workPhoto = await WorkPhoto.findById(id).populate([
     { path: 'author', select: 'name email photoUrl' },
     { path: 'company', select: 'name email photoUrl' },
-  ])
+  ]).select('_id author company image locationUrl latitude longitude createdAt')
   if (!workPhoto || workPhoto?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
   }
