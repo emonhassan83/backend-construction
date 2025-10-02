@@ -35,27 +35,21 @@ router.delete(
 )
 
 router.get(
-  '/my-work-photos',
+  '/author/my-work-photos',
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
   WorkPhotoControllers.getMyWorkPhotos,
 )
 
 router.get(
-  '/company/:companyId',
+  '/sorted-work-photo/:workerId',
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
-  WorkPhotoControllers.getCompanyWorkPhotos,
+  WorkPhotoControllers.groupWorkPhotosByDate,
 )
 
 router.get(
   '/worker/:workerId',
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
   WorkPhotoControllers.getAllWorkersWorkPhotos,
-)
-
-router.get(
-  '/',
-  auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
-  WorkPhotoControllers.getAllWorkPhotos,
 )
 
 router.get(

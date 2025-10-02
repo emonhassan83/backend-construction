@@ -4,7 +4,7 @@ import sendResponse from '../../utils/sendResponse'
 import { WorkPhotoService } from './workPhotos.service'
 
 const createWorkPhoto = catchAsync(async (req, res) => {
-  const result = await WorkPhotoService.createWorkPhotoIntoDB(req.body, req.file)
+  const result = await WorkPhotoService.createWorkPhotoIntoDB(req.body, req.file, req.user._id)
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -14,54 +14,39 @@ const createWorkPhoto = catchAsync(async (req, res) => {
   })
 })
 
-const getAllWorkPhotos = catchAsync(async (req, res) => {
-  const result = await WorkPhotoService.getAllWorkPhotosFromDB(req.query)
-
-  sendResponse(res, {
-    success: true,
-    statusCode: 200,
-    message: 'All Work photos retrieved successfully!',
-    meta: result.meta,
-    data: result.result,
-  })
-})
-
 const getAllWorkersWorkPhotos = catchAsync(async (req, res) => {
   req.query['author'] = req.params.workerId
-  const result = await WorkPhotoService.getAllWorkPhotosFromDB(req.query)
+  const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
     message: 'All Work photos retrieved successfully!',
-    meta: result.meta,
-    data: result.result,
+    data: result,
   })
 })
 
 const getMyWorkPhotos = catchAsync(async (req, res) => {
   req.query['author'] = req.user._id
-  const result = await WorkPhotoService.getAllWorkPhotosFromDB(req.query)
+  const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
     message: 'My Work photos retrieved successfully!',
-    meta: result.meta,
-    data: result.result,
+    data: result,
   })
 })
 
-const getCompanyWorkPhotos = catchAsync(async (req, res) => {
-  req.query['company'] = req.params.companyId
-  const result = await WorkPhotoService.getAllWorkPhotosFromDB(req.query)
+const groupWorkPhotosByDate  = catchAsync(async (req, res) => {
+  req.query['author'] = req.params.workerId
+  const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
-    message: 'Company Work photos retrieved successfully!',
-    meta: result.meta,
-    data: result.result,
+    message: 'My grouped Work photos retrieved successfully!',
+    data: result,
   })
 })
 
@@ -104,10 +89,9 @@ const deleteAWorkPhoto = catchAsync(async (req, res) => {
 
 export const WorkPhotoControllers = {
   createWorkPhoto,
-  getAllWorkPhotos,
   getAllWorkersWorkPhotos,
   getMyWorkPhotos,
-  getCompanyWorkPhotos,
+  groupWorkPhotosByDate,
   getAWorkPhoto,
   updateWorkPhoto,
   deleteAWorkPhoto,

@@ -6,37 +6,33 @@ import { WorkPhoto } from './workPhotos.model'
 import { User } from '../user/user.model'
 import { uploadToS3 } from '../../utils/s3'
 import cron from 'node-cron'
-import { subDays } from 'date-fns'
+import { format, isToday, isYesterday, subDays } from 'date-fns'
 
 export const scheduleOldWorkImageCleanup = () => {
+  // Runs every day at 2 AM
   cron.schedule('0 2 * * *', async () => {
     try {
-      const thresholdDate = subDays(new Date(), 30); 
+      const thresholdDate = subDays(new Date(), 30);
 
-      const oldImages = await WorkPhoto.find({
+      // Directly delete in one query instead of finding + deleting
+      const result = await WorkPhoto.deleteMany({
         createdAt: { $lt: thresholdDate },
         isDeleted: false,
       });
 
-      if (oldImages.length === 0) {
-        console.log('[CRON] 📭 No old images found for deletion.');
-        return;
+      if (result.deletedCount && result.deletedCount > 0) {
+        console.log(`[CRON] ✅ Deleted ${result.deletedCount} old work images (older than 30 days).`);
+      } else {
+        console.log('[CRON] 📭 No old work images found for deletion.');
       }
-
-      // Assign Delete function to each old image]
-      const result = await WorkPhoto.deleteMany({
-        _id: { $in: oldImages.map(img => img._id) },
-      });
-
-      console.log(`[CRON] ✅ Deleted ${result.deletedCount} old work images.`);
     } catch (error) {
       console.error('[CRON] ❌ Error deleting old work images:', error);
     }
   });
 };
 
-const createWorkPhotoIntoDB = async (payload: TWorkPhoto, file: any) => {
-  const { author: userId, company: companyId, latitude, longitude } = payload
+const createWorkPhotoIntoDB = async (payload: TWorkPhoto, file: any, userId: string) => {
+  const {  latitude, longitude } = payload
 
   // Validate user
   const user = await User.findById(userId)
@@ -46,15 +42,22 @@ const createWorkPhotoIntoDB = async (payload: TWorkPhoto, file: any) => {
   if (user.status === 'blocked') {
     throw new AppError(httpStatus.FORBIDDEN, 'Your account is blocked!')
   }
+  if (!user.company) {
+     throw new AppError(httpStatus.NOT_FOUND, 'Your account have no included company!')
+  }
 
   // Validate Company
-  const company = await User.findById(companyId)
+  const company = await User.findById(user.company)
   if (!company || company.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'Your company not found!')
   }
   if (company.status === 'blocked') {
-    throw new AppError(httpStatus.FORBIDDEN, 'Company account is blocked!')
+    throw new AppError(httpStatus.FORBIDDEN, 'Your company account is blocked!')
   }
+
+  // assign author and company
+  payload.author = user._id
+  payload.company = company._id
 
   // upload to service image
   if (file) {
@@ -93,6 +96,48 @@ const getAllWorkPhotosFromDB = async (query: Record<string, unknown>) => {
     meta,
     result,
   }
+}
+
+const groupWorkPhotosByDate = async (query: Record<string, unknown>) => {
+const photos = await WorkPhoto.find(query)
+    .select('_id image location locationUrl createdAt')
+    .sort({ createdAt: -1 })
+
+  const grouped: Record<string, typeof photos> = {}
+
+  photos.forEach((photo) => {
+    let dateLabel: string
+
+    if (isToday(photo.createdAt)) {
+      dateLabel = 'Today'
+    } else if (isYesterday(photo.createdAt)) {
+      dateLabel = 'Yesterday'
+    } else {
+      dateLabel = format(photo.createdAt, 'yyyy-MM-dd')
+    }
+
+    if (!grouped[dateLabel]) {
+      grouped[dateLabel] = []
+    }
+
+    grouped[dateLabel].push(photo)
+  })
+
+  // Convert to array with sorting logic
+  const result = Object.entries(grouped)
+    .sort(([a], [b]) => {
+      if (a === 'Today') return -1
+      if (b === 'Today') return 1
+      if (a === 'Yesterday') return -1
+      if (b === 'Yesterday') return 1
+      return b.localeCompare(a) // sort descending by date string
+    })
+    .map(([date, workUpload]) => ({
+      date,
+      workUpload,
+    }))
+
+  return result
 }
 
 const getAWorkPhotosFromDB = async (id: string) => {
@@ -148,14 +193,8 @@ const updateWorkPhotoFromDB = async (
 
 const deleteAWorkPhotoFromDB = async (id: string) => {
   const workPhoto = await WorkPhoto.findById(id)
-  if (!workPhoto) {
+  if (!workPhoto || workPhoto?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
-  }
-  if (workPhoto?.isDeleted) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      'Work Photo record already deleted!',
-    )
   }
 
   const result = await WorkPhoto.findByIdAndUpdate(
@@ -169,7 +208,6 @@ const deleteAWorkPhotoFromDB = async (id: string) => {
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record Delete failed')
   }
-
   return result
 }
 
@@ -179,4 +217,5 @@ export const WorkPhotoService = {
   getAWorkPhotosFromDB,
   updateWorkPhotoFromDB,
   deleteAWorkPhotoFromDB,
+  groupWorkPhotosByDate
 }

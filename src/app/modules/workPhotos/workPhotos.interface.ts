@@ -10,6 +10,7 @@ export type TWorkPhoto = {
   location: string
   locationUrl: string
   isDeleted: boolean
+  createdAt: Date
 }
 
 export type TWorkPhotoModel = Model<TWorkPhoto, Record<string, unknown>>
