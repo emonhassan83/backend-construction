@@ -26,7 +26,7 @@ export const createToken = (
 }
 
 export const createWorkerToken = (
-  jwtPayload: { _id: Types.ObjectId; contactNumber: string; role: string },
+  jwtPayload: { _id: Types.ObjectId; username: string; role: string },
   secret: string,
   expiresIn: TExpiresIn,
 ) => {

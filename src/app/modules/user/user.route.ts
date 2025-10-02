@@ -46,7 +46,7 @@ router.put(
 
 router.put(
   '/:id',
-  auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
+  auth(USER_ROLE.admin),
   upload.single('image'),
   parseData(),
   zodValidationRequest(UserValidation.updateValidationSchema),

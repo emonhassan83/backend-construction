@@ -37,7 +37,7 @@ export interface TReqUser {
 }
 
 export interface UserModel extends Model<TUser> {
-  isUserExistsByUserName(name: string): Promise<TUser>
+  isUserExistsByUserName(username: string): Promise<TUser>
   isUserExistsByUserContactNumber(name: string): Promise<TUser>
   isUserExistsByEmail(email: string): Promise<TUser>
 

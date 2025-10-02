@@ -12,7 +12,6 @@ export interface TLoginUser {
 }
 
 export interface TLoginWorker {
-  contactNumber: string
-  password: string
-  fcmToken?: string 
+  username: string
+  fcmToken?: string
 }
