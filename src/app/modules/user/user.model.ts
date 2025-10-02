@@ -19,8 +19,7 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     name: {
       type: String,
-      required: true,
-      sparse: true,
+      required: true
     },
     username: {
       type: String,

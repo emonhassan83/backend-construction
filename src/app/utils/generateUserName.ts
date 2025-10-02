@@ -18,3 +18,13 @@ export const generateUniqueUsername = async (input: string): Promise<string> => 
 
   return username
 }
+
+export const generateDummyEmail = async (username: string): Promise<string> => {
+  // Ensure no spaces or invalid chars in username
+  const safeUsername = username.trim().toLowerCase().replace(/\s+/g, '')
+
+  // Create dummy email
+  const email = `${safeUsername}@gmail.com`
+
+  return email
+}

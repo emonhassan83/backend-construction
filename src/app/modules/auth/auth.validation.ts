@@ -15,13 +15,9 @@ const loginValidationSchema = z.object({
 
 const workerLoginValidationSchema = z.object({
   body: z.object({
-    contactNumber: z.string(),
-    password: z
-      .string({
-        invalid_type_error: 'Password must be a string',
-      })
-      .min(6, { message: 'Password must be at least 6 characters' })
-      .max(20, { message: 'Password cannot be more than 20 characters' }),
+    username: z.string({
+      required_error: "User name is required !"
+    }),
       fcmToken: z.string().optional(),
   }),
 })

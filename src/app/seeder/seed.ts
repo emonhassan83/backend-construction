@@ -5,7 +5,8 @@ import { User } from '../modules/user/user.model'
 import { findAdmin } from '../utils/findAdmin'
 
 const adminUser = {
-  name: 'neda2807',
+  name: 'neda',
+  username: 'neda2807',
   email: 'neda2807admin@gmail.com',
   password: config.admin_pass,
   role: USER_ROLE.admin,

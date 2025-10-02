@@ -3,15 +3,14 @@ import AppError from '../../errors/AppError'
 import { TUser } from './user.interface'
 import { User } from './user.model'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { USER_ROLE, UserSearchableFields } from './user.constant'
+import { USER_ROLE, USER_STATUS, UserSearchableFields } from './user.constant'
 import {
+  addCompanyInvitationMail,
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
 import { generateCryptoString } from '../../utils/generateCryptoString'
-import emailSender from '../../utils/emailSender'
-import { generateUniqueUsername } from '../../utils/generateUserName'
-import { WorkPhoto } from '../workPhotos/workPhotos.model'
+import { generateDummyEmail, generateUniqueUsername } from '../../utils/generateUserName'
 
 const addACompanyIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -75,37 +74,42 @@ const addACompanyIntoDB = async (payload: TUser) => {
   await newUser.save()
 
   // Send email to the therapist
-  await emailSender(
-    userPayload.email,
-    'Construction Company Account Invitation',
-    `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-            <div style="text-align: center; padding: 30px 20px; background-color: #f9f9f9; border-radius: 8px;">
-                <h2 style="color: #333; margin-bottom: 10px;">You're Invited to Join</h2>
-                <h1 style="color: #9C6498; margin-bottom: 20px;">Construction App</h1>
-                <p style="color: #555; line-height: 1.6;">You've been invited to join Construction as a company profile. Start generating comments to contribute to our community.</p>
-                <p style="color: #555; margin-top: 20px;">Your email: <strong>${userPayload.email}</strong></p>
-                <p style="color: #555; margin-top: 20px;">Your temporary password: <strong>${userPayload.password}</strong></p>
-                <p style="color: #555; margin-top: 20px; font-weight: bold;"><strong>Important: If you have another account, it will be replaced by this company account. This change cannot be undone.</strong></p>
-            </div>
-            <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
-                <p>If you did not request this invitation, please feel free to ignore this email.</p>
-                <p>&copy; Construction. All rights reserved.</p>
-            </div>
-        </div>
-      `,
-  )
+  await addCompanyInvitationMail(userPayload.email, userPayload.password)
 
   return newUser
 }
 
-const addAWorkerIntoDB = async (payload: TUser) => {
+const addAWorkerIntoDB = async (payload: TUser, userId: string) => {
   if (payload.role === 'admin') {
     throw new AppError(
       httpStatus.FORBIDDEN,
       'You cannot directly assign admin role',
     )
   }
+
+  // Auto-generate email if not provided
+  if (!payload.email) {
+    payload.email = await generateDummyEmail(
+      payload.username,
+    )
+  }
+
+  // validate company
+  const company = await User.findOne({
+    _id: userId,
+    role: USER_ROLE.project_manager,
+    status: USER_STATUS.active,
+    isDeleted: false,
+  })
+  if (!company) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'Company profile not found or active!',
+    )
+  }
+
+  // assign company
+  payload.company = company._id
 
   // 🟡 Prepare final payload with default values if worker
   const userPayload = {
@@ -119,7 +123,7 @@ const addAWorkerIntoDB = async (payload: TUser) => {
     },
   }
 
-  const existingUser = await User.findOne({ email: userPayload.email })
+  const existingUser = await User.findOne({ username: userPayload.username })
 
   if (existingUser) {
     // 🟡 Soft deleted user — recreate
@@ -139,13 +143,8 @@ const addAWorkerIntoDB = async (payload: TUser) => {
     // 🔴 Already active user
     throw new AppError(
       httpStatus.FORBIDDEN,
-      'User already exists with this email',
+      'Worker already exists with this username',
     )
-  }
-
-  // 🟢 New user
-  if (!userPayload.password) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
   }
 
   const newUser = new User(userPayload)
@@ -182,41 +181,8 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   }
 }
 
-const getCompanyWorkerUploadFromDB = async (query: Record<string, unknown>) => {
-  const usersQuery = new QueryBuilder(
-    User.find({ isDeleted: false }).select(
-      '_id id name username photoUrl contactNumber status createdAt'
-    ),
-    query,
-  )
-    .search(UserSearchableFields)
-    .filter()
-    .sort()
-    .paginate()
-    .fields()
-
-  const result = await usersQuery.modelQuery
-  const meta = await usersQuery.countTotal()
-
-  // 🔹 Fetch total uploads for each user
-  const resultsWithUploads = await Promise.all(
-    result.map(async (user: any) => {
-      const totalUpload = await WorkPhoto.countDocuments({
-        author: user._id,
-        isDeleted: false,
-      })
-      return { ...user.toObject(), totalUpload }
-    })
-  )
-
-  return {
-    meta,
-    result: resultsWithUploads,
-  }
-}
-
 const geUserByIdFromDB = async (id: string) => {
-  const user = await User.findOne({ _id: id })
+  const user = await User.findById(id)
     .select(
       '_id id name username email photoUrl contactNumber company status createdAt',
     )
@@ -238,13 +204,8 @@ const changeUserStatusFromDB = async (payload: any) => {
 
   //* if the user is is not exist
   const user = await User.findById(userId)
-  if (!user) {
+  if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
-  }
-
-  //* checking if the user is already deleted
-  if (user?.isDeleted) {
-    throw new AppError(httpStatus.FORBIDDEN, 'This user is deleted !')
   }
 
   const updateUserStatus = await User.findByIdAndUpdate(
@@ -298,13 +259,8 @@ const updateUserInfoFromDB = async (
 const deleteAUserFromDB = async (userId: string) => {
   //* Check if the user exists
   const user = await User.findById(userId).select('_id')
-  if (!user) {
+  if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
-  }
-
-  //* checking if the user is already deleted
-  if (user?.isDeleted) {
-    throw new AppError(httpStatus.FORBIDDEN, 'This user is already deleted !')
   }
 
   // Use `Promise.all` to execute updates in parallel
@@ -326,7 +282,6 @@ export const UserService = {
   addAWorkerIntoDB,
   getAllUsersFromDB,
   geUserByIdFromDB,
-  getCompanyWorkerUploadFromDB,
   changeUserStatusFromDB,
   updateUserInfoFromDB,
   deleteAUserFromDB,

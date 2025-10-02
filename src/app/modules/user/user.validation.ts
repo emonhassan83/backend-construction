@@ -2,20 +2,31 @@ import { z } from 'zod'
 import { USER_STATUS } from './user.constant'
 
 // Define the Zod validation schema
-const createValidationSchema = z.object({
+const createCompanyValidationSchema = z.object({
   body: z.object({
     name: z.string({
       required_error: 'User name is required!',
     }),
-    username: z.string({
-      required_error: 'User name is required!',
-    }).optional(),
     email: z.string({
       required_error: 'Email is required!',
     }).optional(),
     contactNumber: z.string({
       required_error: 'Contact number is required!',
     }),
+  }),
+})
+
+const createWorkerValidationSchema = z.object({
+  body: z.object({
+    name: z.string({
+      required_error: 'User name is required!',
+    }),
+    username: z.string({
+      required_error: 'User username is required!',
+    }),
+    contactNumber: z.string({
+      required_error: 'Contact number is required!',
+    }).optional(),
   }),
 })
 
@@ -56,7 +67,8 @@ const changeStatusValidationSchema = z.object({
 })
 
 export const UserValidation = {
-  createValidationSchema,
+  createCompanyValidationSchema,
+  createWorkerValidationSchema,
   updateValidationSchema,
   changeStatusValidationSchema,
 }

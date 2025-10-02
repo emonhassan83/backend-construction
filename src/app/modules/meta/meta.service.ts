@@ -28,10 +28,9 @@ const getAdminMetaData = async (query: Record<string, unknown>) => {
     isDeleted: false,
   })
   const totalUserCount = await User.countDocuments({
-    role: USER_ROLE.worker,
     isDeleted: false,
   })
-  const { user_year } = query
+  const { year } = query
 
   const now = new Date()
   const firstDayOfCurrentMonth = new Date(
@@ -46,8 +45,8 @@ const getAdminMetaData = async (query: Record<string, unknown>) => {
     createdAt: { $gte: firstDayOfCurrentMonth, $lte: lastDayOfCurrentMonth },
   })
 
-  const selectedUserYear = user_year
-    ? parseInt(user_year as string, 10) || new Date().getFullYear()
+  const selectedUserYear = year
+    ? parseInt(year as string, 10) || new Date().getFullYear()
     : new Date().getFullYear()
 
   // Fetch user registration overview based on the selected year
@@ -61,7 +60,10 @@ const getAdminMetaData = async (query: Record<string, unknown>) => {
   }
 }
 
-const getCompanyMetaData = async (query: Record<string, unknown>, user: any) => {
+const getCompanyMetaData = async (
+  query: Record<string, unknown>,
+  user: any,
+) => {
   const totalWorkerCount = await User.countDocuments({
     role: USER_ROLE.worker,
     company: user._id,

@@ -73,14 +73,10 @@ const loginWorker = async (payload: TLoginWorker) => {
     throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
   }
 
-  // //* checking if the password is correct
-  // if (!(await User.isPasswordMatched(payload?.password, user?.password)))
-  //   throw new AppError(httpStatus.FORBIDDEN, 'Password do not matched')
-
-  // // if user is not verify yet throw error
-  // if (!user?.verification?.status) {
-  //   throw new AppError(httpStatus.FORBIDDEN, 'User account is not verified')
-  // }
+  // if user is not verify yet throw error
+  if (!user?.verification?.status) {
+    throw new AppError(httpStatus.FORBIDDEN, 'User account is not verified')
+  }
 
   //* create token and sent to the  client
   const jwtPayload = {
@@ -400,11 +396,8 @@ const changePassword = async (
 ) => {
   //* checking if the user is exist
   const user = await User.isUserExistsByEmail(userData?.email)
-  if (!user) {
+  if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
-  }
-  if (user?.isDeleted) {
-    throw new AppError(httpStatus.FORBIDDEN, 'This user is deleted !')
   }
 
   //* checking if the password is correct
@@ -452,11 +445,8 @@ const refreshToken = async (token: string) => {
 
   //* checking if the user is exist
   const user = await User.isUserExistsByEmail(decoded?.email)
-  if (!user) {
+  if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
-  }
-  if (user?.isDeleted) {
-    throw new AppError(httpStatus.FORBIDDEN, 'This user is deleted !')
   }
 
   const jwtPayload = {

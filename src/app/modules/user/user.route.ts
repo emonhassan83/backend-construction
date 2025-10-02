@@ -13,25 +13,21 @@ const upload = multer({ storage })
 
 router.post(
   '/add-company',
-  upload.single('image'),
-  parseData(),
   auth(USER_ROLE.admin),
-  zodValidationRequest(UserValidation.createValidationSchema),
+  zodValidationRequest(UserValidation.createCompanyValidationSchema),
   UserControllers.addACompany,
 )
 
 router.post(
   '/add-worker',
-  upload.single('image'),
-  parseData(),
   auth(USER_ROLE.project_manager),
-  zodValidationRequest(UserValidation.createValidationSchema),
+  zodValidationRequest(UserValidation.createWorkerValidationSchema),
   UserControllers.addAWorker,
 )
 
 router.patch(
   '/change-status',
-  auth(USER_ROLE.admin),
+  auth(USER_ROLE.admin, USER_ROLE.project_manager),
   zodValidationRequest(UserValidation.changeStatusValidationSchema),
   UserControllers.changeUserStatus,
 )
@@ -46,7 +42,7 @@ router.put(
 
 router.put(
   '/:id',
-  auth(USER_ROLE.admin),
+  auth(USER_ROLE.admin, USER_ROLE.project_manager),
   upload.single('image'),
   parseData(),
   zodValidationRequest(UserValidation.updateValidationSchema),
@@ -60,13 +56,7 @@ router.delete(
 )
 
 router.get(
-  '/company-worker-upload/:companyId',
-  auth(USER_ROLE.admin, USER_ROLE.project_manager),
-  UserControllers.getCompanyWorkerUpload,
-)
-
-router.get(
-  '/company/:companyId',
+  '/company/my-workers',
   auth(USER_ROLE.admin, USER_ROLE.project_manager),
   UserControllers.getUsersByCompany,
 )
@@ -77,8 +67,8 @@ router.get(
   UserControllers.getMyProfile,
 )
 
-router.get('/', auth(USER_ROLE.admin), UserControllers.getAllUsers)
+router.get('/', auth(USER_ROLE.admin, USER_ROLE.project_manager), UserControllers.getAllUsers)
 
-router.get('/:id', auth(USER_ROLE.admin), UserControllers.getUserById)
+router.get('/:id', auth(USER_ROLE.admin, USER_ROLE.project_manager), UserControllers.getUserById)
 
 export const UserRoutes = router

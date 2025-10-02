@@ -6,40 +6,26 @@ import { Request, Response } from 'express'
 import { uploadToS3 } from '../../utils/s3'
 
 const addACompany = catchAsync(async (req, res) => {
-  if (req?.file) {
-    req.body.photoUrl = await uploadToS3({
-      file: req.file,
-      fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
-    })
-  }
-
   const result = await UserService.addACompanyIntoDB(req?.body)
-  const { _id, id, name, email, photoUrl, contactNumber } = result
+  const { _id, id, name, email, contactNumber } = result
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
     message: 'Add a company successfully!',
-    data: { _id, id, name, email, photoUrl, contactNumber },
+    data: { _id, id, name, email, contactNumber },
   })
 })
 
 const addAWorker = catchAsync(async (req, res) => {
-  if (req?.file) {
-    req.body.photoUrl = await uploadToS3({
-      file: req.file,
-      fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
-    })
-  }
-
-  const result = await UserService.addAWorkerIntoDB(req?.body)
-  const { _id, id, name, photoUrl, username, contactNumber } = result
+  const result = await UserService.addAWorkerIntoDB(req?.body, req.user._id)
+  const { _id, id, name, username, contactNumber } = result
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
     message: 'Add a worker successfully!',
-    data: { _id, id, name, username, photoUrl, contactNumber },
+    data: { _id, id, name, username, contactNumber },
   })
 })
 
@@ -56,26 +42,13 @@ const getAllUsers = catchAsync(async (req, res) => {
 })
 
 const getUsersByCompany = catchAsync(async (req, res) => {
-  req.query['company'] = req.params.companyId
+  req.query['company'] = req.user._id
   const result = await UserService.getAllUsersFromDB(req.query)
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
     message: 'Users retrieved successfully!',
-    meta: result.meta,
-    data: result.result,
-  })
-})
-
-const getCompanyWorkerUpload = catchAsync(async (req, res) => {
-  req.query['company'] = req.params.companyId
-  const result = await UserService.getCompanyWorkerUploadFromDB(req.query)
-
-  sendResponse(res, {
-    success: true,
-    statusCode: 200,
-    message: 'Company work upload retrieved successfully!',
     meta: result.meta,
     data: result.result,
   })
@@ -170,7 +143,6 @@ export const UserControllers = {
   addAWorker,
   getAllUsers,
   getUsersByCompany,
-  getCompanyWorkerUpload,
   getUserById,
   getMyProfile,
   changeUserStatus,
