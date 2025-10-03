@@ -1,6 +1,8 @@
 import { USER_ROLE } from '../user/user.constant'
 import { User } from '../user/user.model'
 import { startOfYear, endOfYear } from 'date-fns'
+import { WorkPhoto } from '../workPhotos/workPhotos.model'
+import mongoose from 'mongoose'
 
 const fetchDashboardMetaData = async (
   user: any,
@@ -69,13 +71,15 @@ const getCompanyMetaData = async (
     company: user._id,
     isDeleted: false,
   })
-  const totalImageCount = await User.countDocuments({
+
+  const totalImageCount = await WorkPhoto.countDocuments({
     company: user._id,
     isDeleted: false,
   })
-  const { user_year } = query
-  const selectedUserYear = user_year
-    ? parseInt(user_year as string, 10) || new Date().getFullYear()
+
+  const { year } = query
+  const selectedUserYear = year
+    ? parseInt(year as string, 10) || new Date().getFullYear()
     : new Date().getFullYear()
 
   // Fetch user registration overview based on the selected year
@@ -100,7 +104,8 @@ const getCompanyUserOverview = async (year: number, user: any) => {
   const monthlyUsers = await User.aggregate([
     {
       $match: {
-        company: user._id,
+        company: new mongoose.Types.ObjectId(user._id),
+        role: USER_ROLE.worker,
         createdAt: { $gte: yearStart, $lte: yearEnd },
       },
     },
