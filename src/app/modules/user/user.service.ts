@@ -10,7 +10,11 @@ import {
   sendUserStatusNotifYToUser,
 } from './user.utils'
 import { generateCryptoString } from '../../utils/generateCryptoString'
-import { generateDummyEmail, generateUniqueUsername } from '../../utils/generateUserName'
+import {
+  generateDummyEmail,
+  generateUniqueUsername,
+} from '../../utils/generateUserName'
+import { WorkPhoto } from '../workPhotos/workPhotos.model'
 
 const addACompanyIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -89,9 +93,7 @@ const addAWorkerIntoDB = async (payload: TUser, userId: string) => {
 
   // Auto-generate email if not provided
   if (!payload.email) {
-    payload.email = await generateDummyEmail(
-      payload.username,
-    )
+    payload.email = await generateDummyEmail(payload.username)
   }
 
   // validate company
@@ -168,16 +170,26 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
     .paginate()
     .fields()
 
-  const result = await usersQuery.modelQuery
+  const users = await usersQuery.modelQuery
   const meta = await usersQuery.countTotal()
 
-  if (!usersQuery) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Users not found!')
-  }
+  const usersWithPhotoCount = await Promise.all(
+    users.map(async (user: any) => {
+      const count = await WorkPhoto.countDocuments({
+        author: user._id,
+        isDeleted: false,
+      })
+
+      return {
+        ...user.toObject(),
+        photoUploadCount: count,
+      }
+    }),
+  )
 
   return {
     meta,
-    result,
+    result: usersWithPhotoCount,
   }
 }
 
