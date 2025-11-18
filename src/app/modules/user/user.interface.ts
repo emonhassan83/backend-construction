@@ -12,6 +12,9 @@ export interface TUser {
   company: Types.ObjectId | null
   contactNumber: string
   photoUrl?: string
+  oneDriveRefreshToken?: string
+  oneDriveConnected: boolean
+  oneDriveConnectedAt: Date
   role: TUserRole
   registerWith: string
   needsPasswordChange: boolean

@@ -3,6 +3,40 @@ import httpStatus from 'http-status'
 import sendResponse from '../../utils/sendResponse'
 import { WorkPhotoService } from './workPhotos.service'
 
+const connectOneDrive = catchAsync(async (req, res) => {
+  const result = await WorkPhotoService.connectOneDrive(req.params.companyId)
+
+  // res.redirect(result);
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'One drive connect oauth redirect url fetch!',
+    data: result,
+  })
+})
+const oneDriveRefreshToken = catchAsync(async (req, res) => {
+  const { code, state: companyCode } = req.query;
+  const result = await WorkPhotoService.oneDriveRefreshToken(code as string, companyCode as string)
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Refresh token fetched successfully!',
+    data: result,
+  })
+})
+
+const uploadFileOneDrive = catchAsync(async (req, res) => {
+  const result = await WorkPhotoService.uploadFileOneDrive(req.body, req.file)
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Upload file one drive successfully!',
+    data: result,
+  })
+})
+
 const createWorkPhoto = catchAsync(async (req, res) => {
   const result = await WorkPhotoService.createWorkPhotoIntoDB(req.body, req.file, req.user._id)
 
@@ -88,6 +122,9 @@ const deleteAWorkPhoto = catchAsync(async (req, res) => {
 })
 
 export const WorkPhotoControllers = {
+  connectOneDrive,
+  oneDriveRefreshToken,
+  uploadFileOneDrive,
   createWorkPhoto,
   getAllWorkersWorkPhotos,
   getMyWorkPhotos,

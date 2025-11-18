@@ -19,12 +19,12 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     name: {
       type: String,
-      required: true
+      required: true,
     },
     username: {
       type: String,
       unique: true,
-      required: false
+      required: false,
     },
     email: {
       type: String,
@@ -46,6 +46,18 @@ const userSchema = new Schema<TUser, UserModel>(
     photoUrl: {
       type: String,
       default: null,
+    },
+    oneDriveRefreshToken: {
+      type: String,
+      required: false,
+    },
+    oneDriveConnected: {
+      type: Boolean,
+      default: false,
+    },
+    oneDriveConnectedAt: {
+      type: Date,
+      required: false,
     },
     role: {
       type: String,

@@ -7,32 +7,131 @@ import { User } from '../user/user.model'
 import { uploadToS3 } from '../../utils/s3'
 import cron from 'node-cron'
 import { format, isToday, isYesterday, subDays } from 'date-fns'
+import axios from 'axios'
+import * as fs from 'fs'
+import config from '../../config'
+import { ensureFolder, getAccessTokenFromRefresh } from './workPhotos.utils'
+import { encrypt } from '../../utils/encryption'
 
 export const scheduleOldWorkImageCleanup = () => {
   // Runs every day at 2 AM
   cron.schedule('0 2 * * *', async () => {
     try {
-      const thresholdDate = subDays(new Date(), 30);
+      const thresholdDate = subDays(new Date(), 30)
 
       // Directly delete in one query instead of finding + deleting
       const result = await WorkPhoto.deleteMany({
         createdAt: { $lt: thresholdDate },
         isDeleted: false,
-      });
+      })
 
       if (result.deletedCount && result.deletedCount > 0) {
-        console.log(`[CRON] ✅ Deleted ${result.deletedCount} old work images (older than 30 days).`);
+        console.log(
+          `[CRON] ✅ Deleted ${result.deletedCount} old work images (older than 30 days).`,
+        )
       } else {
-        console.log('[CRON] 📭 No old work images found for deletion.');
+        console.log('[CRON] 📭 No old work images found for deletion.')
       }
     } catch (error) {
-      console.error('[CRON] ❌ Error deleting old work images:', error);
+      console.error('[CRON] ❌ Error deleting old work images:', error)
     }
-  });
-};
+  })
+}
 
-const createWorkPhotoIntoDB = async (payload: TWorkPhoto, file: any, userId: string) => {
-  const {  latitude, longitude } = payload
+// OneDrive Connect (OAuth Redirect)
+const connectOneDrive = async (companyId: string) => {
+  const redirectUri = `${process.env.BASE_URL}/auth/onedrive/callback`
+
+  const authUrl =
+    `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
+    `client_id=${process.env.CLIENT_ID}` +
+    `&response_type=code` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&response_mode=query` +
+    `&scope=offline_access Files.ReadWrite.All` +
+    `&state=${companyId}`
+
+  return authUrl
+}
+
+// OneDrive Connect (OAuth Redirect)
+const oneDriveRefreshToken = async (code: string, companyId: string) => {
+  try {
+    const tokenResponse = await axios.post(
+      'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+      new URLSearchParams({
+        client_id: config.microsoft.clientId ?? '',
+        client_secret: config.microsoft.clientSecret ?? '',
+        code,
+        redirect_uri: `${config.server_url}/auth/onedrive/callback`,
+        grant_type: 'authorization_code',
+      } as Record<string, string>),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+    )
+
+    const { refresh_token } = tokenResponse.data
+
+    // Save in database
+    await User.findByIdAndUpdate(
+      { companyId },
+      {
+        $set: {
+          oneDriveRefreshToken: encrypt(refresh_token),
+          oneDriveConnected: true,
+          oneDriveConnectedAt: new Date(),
+        },
+      },
+    )
+
+    return `
+      <h2>Successfully connect onedrive!</h2>
+      <p>Company: ${companyId}</p>
+      <script>setTimeout(() => window.close(), 3000);</script>
+    `
+  } catch (err) {
+    throw new AppError(httpStatus.CONFLICT, 'Connection failed!')
+  }
+}
+
+// Upload file in one drive
+const uploadFileOneDrive = async (payload: any, file: any) => {
+  const { company } = payload;
+  try {
+    const accessToken = await getAccessTokenFromRefresh(company);
+
+    const folderPath = `WorkerPhotos/${new Date().getFullYear()}/${String(new Date().getMonth()+1).padStart(2,'0')}`;
+    const fileName = `${Date.now()}_${file.originalname}`;
+
+    // If no have any one drive floder
+    await ensureFolder(accessToken, folderPath);
+
+    // Upload
+    await axios.put(
+      `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${fileName}:/content`,
+      fs.createReadStream(file.path),
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/octet-stream'
+        }
+      }
+    );
+
+    fs.unlinkSync(file.path);
+    return;
+
+  } catch (err: any) {
+    console.log(err.response?.data || err.message);
+    throw new AppError(httpStatus.CONFLICT, 'File upload failed!')
+  }
+}
+
+const createWorkPhotoIntoDB = async (
+  payload: TWorkPhoto,
+  file: any,
+  userId: string,
+) => {
+  const { latitude, longitude } = payload
 
   // Validate user
   const user = await User.findById(userId)
@@ -43,7 +142,10 @@ const createWorkPhotoIntoDB = async (payload: TWorkPhoto, file: any, userId: str
     throw new AppError(httpStatus.FORBIDDEN, 'Your account is blocked!')
   }
   if (!user.company) {
-     throw new AppError(httpStatus.NOT_FOUND, 'Your account have no included company!')
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'Your account have no included company!',
+    )
   }
 
   // Validate Company
@@ -99,7 +201,7 @@ const getAllWorkPhotosFromDB = async (query: Record<string, unknown>) => {
 }
 
 const groupWorkPhotosByDate = async (query: Record<string, unknown>) => {
-const photos = await WorkPhoto.find(query)
+  const photos = await WorkPhoto.find(query)
     .select('_id image location locationUrl createdAt')
     .sort({ createdAt: -1 })
 
@@ -141,10 +243,12 @@ const photos = await WorkPhoto.find(query)
 }
 
 const getAWorkPhotosFromDB = async (id: string) => {
-  const workPhoto = await WorkPhoto.findById(id).populate([
-    { path: 'author', select: 'name email photoUrl' },
-    { path: 'company', select: 'name email photoUrl' },
-  ]).select('_id author company image locationUrl latitude longitude createdAt')
+  const workPhoto = await WorkPhoto.findById(id)
+    .populate([
+      { path: 'author', select: 'name email photoUrl' },
+      { path: 'company', select: 'name email photoUrl' },
+    ])
+    .select('_id author company image locationUrl latitude longitude createdAt')
   if (!workPhoto || workPhoto?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
   }
@@ -212,10 +316,13 @@ const deleteAWorkPhotoFromDB = async (id: string) => {
 }
 
 export const WorkPhotoService = {
+  connectOneDrive,
+  oneDriveRefreshToken,
+uploadFileOneDrive,
   createWorkPhotoIntoDB,
   getAllWorkPhotosFromDB,
   getAWorkPhotosFromDB,
   updateWorkPhotoFromDB,
   deleteAWorkPhotoFromDB,
-  groupWorkPhotosByDate
+  groupWorkPhotosByDate,
 }

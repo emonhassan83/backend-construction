@@ -14,6 +14,7 @@ export default {
   bcrypt_salt_rounds: process.env.BCRYPT_SALT_ROUNDS,
   jwt_access_secret: process.env.JWT_ACCESS_SECRET,
   jwt_refresh_secret: process.env.JWT_REFRESH_SECRET,
+  encryption_key: process.env.ENCRYPTION_KEY,
   jwt_access_expires_in: process.env.JWT_ACCESS_EXPIRE_IN,
   jwt_refresh_expires_in: process.env.JWT_REFRESH_EXPIRE_IN,
   reset_pass_link: process.env.RESET_PASS_LINK,
@@ -36,6 +37,11 @@ export default {
     region: process.env.AWS_REGION,
     bucket: process.env.AWS_BUCKET_NAME,
     endpoint: process.env.SPACES_API,
+  },
+  microsoft: {
+    clientId: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    tenantId: process.env.TENANT_ID,
   },
   sms_auth_key: process.env.SMS_AUTH_KEY,
 }
