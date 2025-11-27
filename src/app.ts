@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser'
 import globalErrorHandler from './app/middleware/globalErrorHandler'
 import notFound from './app/middleware/notFound'
 import router from './app/routes'
-import config from './app/config'
+import { WorkPhotoControllers } from './app/modules/workPhotos/workPhotos.controller'
 
 const app: Application = express()
 
@@ -22,6 +22,12 @@ app.use(cookieParser())
 
 // application routes
 app.use('/api/v1', router)
+
+// Start OAuth flow -> GET /api/v1/onedrive/connect/:companyId
+router.get('/onedrive/connect/:companyId', WorkPhotoControllers.connectOneDrive)
+
+// Callback from Microsoft OAuth -> GET /api/v1/onedrive/callback
+router.get('/onedrive/callback', WorkPhotoControllers.oneDriveRefreshToken)
 
 app.get('/', (req: Request, res: Response) => {
   res.json({

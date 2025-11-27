@@ -40,7 +40,7 @@ export const scheduleOldWorkImageCleanup = () => {
 
 // OneDrive Connect (OAuth Redirect)
 const connectOneDrive = async (companyId: string) => {
-  const redirectUri = `${process.env.BASE_URL}/auth/onedrive/callback`
+  const redirectUri = `${config.server_url}/auth/onedrive/callback`
 
   const authUrl =
     `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
@@ -48,7 +48,7 @@ const connectOneDrive = async (companyId: string) => {
     `&response_type=code` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&response_mode=query` +
-    `&scope=offline_access Files.ReadWrite.All` +
+    `&scope=${encodeURIComponent('offline_access Files.ReadWrite.All')}` +
     `&state=${companyId}`
 
   return authUrl
@@ -93,37 +93,85 @@ const oneDriveRefreshToken = async (code: string, companyId: string) => {
   }
 }
 
-// Upload file in one drive
-const uploadFileOneDrive = async (payload: any, file: any) => {
-  const { company } = payload;
+const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
+  const { latitude, longitude } = payload
+
+  // Validate User
+  const user = await User.findById(userId)
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+  }
+  if (!user.company) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Your account has no company!')
+  }
+
+  // Validate Company
+  const company = await User.findById(user.company)
+  if (!company || company.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
+  }
+
+  // Assign meta info
+  payload.author = user._id
+  payload.company = company._id
+
+  // Upload S3 Image if exists
+  if (file) {
+    payload.image = await uploadToS3({
+      file,
+      fileName: `images/work-photos/${user.name}/${Date.now()}`,
+    })
+  }
+
+  // Generate Map URL
+  if (latitude && longitude) {
+    payload.locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`
+  }
+
+  // Save Record
+  const workPhoto = await WorkPhoto.create(payload)
+  if (!workPhoto) {
+    throw new AppError(httpStatus.CONFLICT, 'Work photo not created!')
+  }
+
+  // Access Token
+  const accessToken = await getAccessTokenFromRefresh(company._id.toString())
+  if (!accessToken) {
+    throw new AppError(
+      httpStatus.UNAUTHORIZED,
+      'Failed to generate access token!',
+    )
+  }
+
+  // Prepare OneDrive Path
+  const folderPath = `WorkerPhotos/${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}`
+  const fileName = `${Date.now()}_${file.originalname}`
+
+  // Ensure OneDrive Folder Exists
+  await ensureFolder(accessToken, folderPath)
+
+  // Upload File to OneDrive
   try {
-    const accessToken = await getAccessTokenFromRefresh(company);
-
-    const folderPath = `WorkerPhotos/${new Date().getFullYear()}/${String(new Date().getMonth()+1).padStart(2,'0')}`;
-    const fileName = `${Date.now()}_${file.originalname}`;
-
-    // If no have any one drive floder
-    await ensureFolder(accessToken, folderPath);
-
-    // Upload
     await axios.put(
       `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${fileName}:/content`,
       fs.createReadStream(file.path),
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/octet-stream'
-        }
-      }
-    );
-
-    fs.unlinkSync(file.path);
-    return;
-
-  } catch (err: any) {
-    console.log(err.response?.data || err.message);
-    throw new AppError(httpStatus.CONFLICT, 'File upload failed!')
+          'Content-Type': 'application/octet-stream',
+        },
+      },
+    )
+  } catch (err) {
+    throw new AppError(httpStatus.BAD_GATEWAY, 'OneDrive upload failed!')
+  } finally {
+    // Cleanup temp file
+    if (file.path && fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path)
+    }
   }
+
+  return workPhoto
 }
 
 const createWorkPhotoIntoDB = async (
@@ -318,7 +366,7 @@ const deleteAWorkPhotoFromDB = async (id: string) => {
 export const WorkPhotoService = {
   connectOneDrive,
   oneDriveRefreshToken,
-uploadFileOneDrive,
+  uploadFileOneDrive,
   createWorkPhotoIntoDB,
   getAllWorkPhotosFromDB,
   getAWorkPhotosFromDB,

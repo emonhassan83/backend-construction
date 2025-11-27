@@ -27,7 +27,7 @@ const oneDriveRefreshToken = catchAsync(async (req, res) => {
 })
 
 const uploadFileOneDrive = catchAsync(async (req, res) => {
-  const result = await WorkPhotoService.uploadFileOneDrive(req.body, req.file)
+  const result = await WorkPhotoService.uploadFileOneDrive(req.body, req.file, req.user._id)
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
