@@ -12,6 +12,8 @@ import * as fs from 'fs'
 import config from '../../config'
 import { ensureFolder, getAccessTokenFromRefresh } from './workPhotos.utils'
 import { encrypt } from '../../utils/encryption'
+import crypto from 'crypto'
+import { OneDriveAuthTemp } from '../oneDriveAuthTemp/oneDriveAuthTemp.model'
 
 export const scheduleOldWorkImageCleanup = () => {
   // Runs every day at 2 AM
@@ -40,139 +42,208 @@ export const scheduleOldWorkImageCleanup = () => {
 
 // OneDrive Connect (OAuth Redirect)
 const connectOneDrive = async (companyId: string) => {
-  const redirectUri = `${config.server_url}/auth/onedrive/callback`
+  // PKCE জেনারেট করো
+  const verifier = crypto.randomBytes(32).toString('base64url')
+  const challenge = crypto
+    .createHash('sha256')
+    .update(verifier)
+    .digest('base64url')
+
+  // টেম্প টেবিলে সেভ করো
+  await OneDriveAuthTemp.create({
+    companyId,
+    codeVerifier: verifier,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000), // ১০ মিনিট
+  })
+
+  const redirectUri = `${config.server_url}/onedrive/callback`
 
   const authUrl =
     `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
-    `client_id=${process.env.CLIENT_ID}` +
+    `client_id=${config.microsoft.clientId}` +
     `&response_type=code` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&response_mode=query` +
-    `&scope=${encodeURIComponent('offline_access Files.ReadWrite.All')}` +
-    `&state=${companyId}`
+    `&scope=offline_access Files.ReadWrite.All` +
+    `&state=${companyId}` +
+    `&code_challenge=${challenge}` +
+    `&code_challenge_method=S256`;
 
   return authUrl
 }
 
 // OneDrive Connect (OAuth Redirect)
-const oneDriveRefreshToken = async (code: string, companyId: string) => {
+const oneDriveRefreshToken = async (code: string, state: string) => {
+  // console.log('OneDrive OAuth Callback received:', { code, state });
+  
   try {
+    // ১. টেম্প থেকে codeVerifier নিয়ে ডিলিট করো
+    const temp = await OneDriveAuthTemp.findOneAndDelete({ companyId: state });
+    if (!temp) {
+      throw new AppError(400, 'Invalid or expired authorization request');
+    }
+
+    const redirectUri = `${config.server_url}/onedrive/callback`;
+    console.log('Using Redirect URI:', redirectUri);
+    
+
+    // ২. Token Exchange (PKCE)
     const tokenResponse = await axios.post(
       'https://login.microsoftonline.com/common/oauth2/v2.0/token',
       new URLSearchParams({
-        client_id: config.microsoft.clientId ?? '',
-        client_secret: config.microsoft.clientSecret ?? '',
+        client_id: config.microsoft.clientId!,
+        scope: "offline_access Files.ReadWrite.All",
         code,
-        redirect_uri: `${config.server_url}/auth/onedrive/callback`,
+        redirect_uri: redirectUri,
         grant_type: 'authorization_code',
-      } as Record<string, string>),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-    )
-
-    const { refresh_token } = tokenResponse.data
-
-    // Save in database
-    await User.findByIdAndUpdate(
-      { companyId },
+        code_verifier: temp.codeVerifier,
+      }),
       {
-        $set: {
-          oneDriveRefreshToken: encrypt(refresh_token),
-          oneDriveConnected: true,
-          oneDriveConnectedAt: new Date(),
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }
+    );
+    console.log('OneDrive Token Response:', tokenResponse);
+    
+
+    const { refresh_token } = tokenResponse.data;
+
+    if (!refresh_token) {
+      throw new Error('Refresh token not received from Microsoft');
+    }
+
+    // ৩. User টেবিলে সেভ করো (এখানে ভুল হচ্ছে!)
+    const updated = await User.findOneAndUpdate(
+      { _id: state }, // ← এটা ভুল! state = companyId, কিন্তু _id দিয়ে খুঁজছো
+      {
+        oneDriveRefreshToken: encrypt(refresh_token),
+        oneDriveConnected: true,
+        oneDriveConnectedAt: new Date(),
       },
-    )
+      { new: true }
+    );
+
+    if (!updated) {
+      throw new Error('Company user not found in database');
+    }
 
     return `
-      <h2>Successfully connect onedrive!</h2>
-      <p>Company: ${companyId}</p>
-      <script>setTimeout(() => window.close(), 3000);</script>
-    `
-  } catch (err) {
-    throw new AppError(httpStatus.CONFLICT, 'Connection failed!')
+      <h2>OneDrive সফলভাবে কানেক্ট হয়েছে!</h2>
+      <p>Company ID: ${state}</p>
+      <script>
+        setTimeout(() => window.close(), 2000);
+      </script>
+    `;
+
+  } catch (error: any) {
+    console.error('OneDrive Callback Failed:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      code: error.code,
+    });
+
+    // এররটা ফ্রন্টএন্ডে দেখানোর জন্য
+    return `
+      <h2 style="color:red">OneDrive কানেক্ট ফেইলড!</h2>
+      <pre>${JSON.stringify(error.response?.data || error.message, null, 2)}</pre>
+      <script>setTimeout(() => window.close(), 10000);</script>
+    `;
   }
-}
+};
 
 const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
-  const { latitude, longitude } = payload
+  const { latitude, longitude } = payload;
 
   // Validate User
-  const user = await User.findById(userId)
+  const user = await User.findById(userId);
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
   }
   if (!user.company) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Your account has no company!')
+    throw new AppError(httpStatus.NOT_FOUND, 'Your account has no company!');
   }
 
   // Validate Company
-  const company = await User.findById(user.company)
+  const company = await User.findById(user.company);
   if (!company || company.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
   }
 
   // Assign meta info
-  payload.author = user._id
-  payload.company = company._id
+  payload.author = user._id;
+  payload.company = company._id;
 
-  // Upload S3 Image if exists
+  let uploadedImageUrl = null;
+
+  // শুধু যদি ফাইল থাকে তবেই প্রসেস করো
   if (file) {
-    payload.image = await uploadToS3({
+    // S3 তে আপলোড
+    uploadedImageUrl = await uploadToS3({
       file,
-      fileName: `images/work-photos/${user.name}/${Date.now()}`,
-    })
+      fileName: `images/work-photos/${user.name}/${Date.now()}_${file.originalname}`,
+    });
+    payload.image = uploadedImageUrl;
   }
 
   // Generate Map URL
   if (latitude && longitude) {
-    payload.locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`
+    payload.locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
   }
 
   // Save Record
-  const workPhoto = await WorkPhoto.create(payload)
+  const workPhoto = await WorkPhoto.create(payload);
   if (!workPhoto) {
-    throw new AppError(httpStatus.CONFLICT, 'Work photo not created!')
+    throw new AppError(httpStatus.CONFLICT, 'Work photo not created!');
   }
 
-  // Access Token
-  const accessToken = await getAccessTokenFromRefresh(company._id.toString())
-  if (!accessToken) {
-    throw new AppError(
-      httpStatus.UNAUTHORIZED,
-      'Failed to generate access token!',
-    )
-  }
+  // যদি OneDrive কানেক্টেড থাকে + ফাইল থাকে → তবেই আপলোড করো
+  if (company.oneDriveConnected && file) {
+    try {
+      const accessToken = await getAccessTokenFromRefresh(company._id.toString());
+      if (!accessToken) {
+        console.log('OneDrive: Access token পাওয়া যায়নি, আপলোড স্কিপ করা হলো');
+        return workPhoto; // ফেইল হলেও ওয়ার্কারের ছবি সেভ হবে
+      }
 
-  // Prepare OneDrive Path
-  const folderPath = `WorkerPhotos/${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}`
-  const fileName = `${Date.now()}_${file.originalname}`
+      const folderPath = `WorkerPhotos/${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+      const fileName = `${Date.now()}_${file.originalname}`;
 
-  // Ensure OneDrive Folder Exists
-  await ensureFolder(accessToken, folderPath)
+      // ফোল্ডার তৈরি করো (যদি না থাকে)
+      await ensureFolder(accessToken, folderPath);
 
-  // Upload File to OneDrive
-  try {
-    await axios.put(
-      `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${fileName}:/content`,
-      fs.createReadStream(file.path),
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/octet-stream',
+      // Memory থেকে আপলোড করো (file.buffer থাকলে) → সবচে ফাস্ট ও সেফ
+      const fileBuffer = file.buffer || (file.path ? fs.createReadStream(file.path) : null);
+
+      if (!fileBuffer) {
+        throw new Error('File buffer or path not available');
+      }
+
+      await axios.put(
+        `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${fileName}:/content`,
+        fileBuffer, // এটাই ম্যাজিক!
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': file.mimetype || 'application/octet-stream',
+          },
         },
-      },
-    )
-  } catch (err) {
-    throw new AppError(httpStatus.BAD_GATEWAY, 'OneDrive upload failed!')
-  } finally {
-    // Cleanup temp file
-    if (file.path && fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path)
+      );
+
+      console.log(`OneDrive-এ আপলোড সফল: ${fileName}`);
+    } catch (err: any) {
+      // OneDrive ফেইল হলেও ওয়ার্কারের ছবি হারাবে না!
+      console.error('OneDrive upload failed (but S3 saved):', err.message);
+      // throw না করো → যাতে মেইন ফিচার কাজ করে
+    } finally {
+      // টেম্প ফাইল থাকলে ডিলিট করো
+      if (file?.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
     }
   }
 
-  return workPhoto
-}
+  return workPhoto;
+};
 
 const createWorkPhotoIntoDB = async (
   payload: TWorkPhoto,

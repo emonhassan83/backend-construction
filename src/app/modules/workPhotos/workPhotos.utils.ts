@@ -17,7 +17,7 @@ export const getAccessTokenFromRefresh = async (companyId: string): Promise<stri
       'https://login.microsoftonline.com/common/oauth2/v2.0/token',
       new URLSearchParams({
         client_id: config.microsoft.clientId,
-        client_secret: config.microsoft.clientSecret,
+        // client_secret: config.microsoft.clientSecret,
         refresh_token: refreshToken,
         scope: 'offline_access Files.ReadWrite.All',
         grant_type: 'refresh_token',
