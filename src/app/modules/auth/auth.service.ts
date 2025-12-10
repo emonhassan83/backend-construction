@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt'
-import httpStatus from 'http-status'
+import httpStatus, { status } from 'http-status'
 import config from '../../config'
 import AppError from '../../errors/AppError'
 import { JwtPayload } from 'jsonwebtoken'
@@ -63,6 +63,14 @@ const loginUser = async (payload: TLoginUser) => {
   return {
     accessToken,
     refreshToken,
+    user: {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      status: user.status,
+      oneDriveConnected: user.oneDriveConnected,
+      oneDriveConnectedAt: user.oneDriveConnectedAt,
+    },
   }
 }
 
@@ -128,7 +136,7 @@ const registerWithGoogle = async (payload: Partial<TUser>) => {
         `This account is registered with ${user.registerWith}, so you should try logging in using that method.`,
       )
     }
-  
+
     // If user is soft deleted, reactivate
     if (user?.isDeleted) {
       const updatedUser = await User.findByIdAndUpdate(
@@ -434,7 +442,7 @@ const changePassword = async (
   }
 
   // Send a notification to the user informing them about the successful password change
-  user?.role === 'admin' && await authNotifyUser('PASSWORD_CHANGE', user)
+  user?.role === 'admin' && (await authNotifyUser('PASSWORD_CHANGE', user))
 
   return null
 }
@@ -525,13 +533,17 @@ const forgetPassword = async (payload: { email: string }) => {
   )
 
   // Send a notification to the user informing them about the forgot password request
- user?.role === 'admin' && await authNotifyUser('PASSWORD_FORGET', user)
+  user?.role === 'admin' && (await authNotifyUser('PASSWORD_FORGET', user))
 
   return { verifyToken: resetToken }
 }
 
 const workerResetPassword = async (
-  payload: { contactNumber: string; newPassword: string; confirmPassword: string },
+  payload: {
+    contactNumber: string
+    newPassword: string
+    confirmPassword: string
+  },
   token: string,
 ) => {
   //* checking if the user is exist
@@ -674,5 +686,5 @@ export const AuthServices = {
   refreshToken,
   forgetPassword,
   resetPassword,
-  workerResetPassword
+  workerResetPassword,
 }

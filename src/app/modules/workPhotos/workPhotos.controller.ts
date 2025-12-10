@@ -2,6 +2,7 @@ import catchAsync from '../../utils/catchAsync'
 import httpStatus from 'http-status'
 import sendResponse from '../../utils/sendResponse'
 import { WorkPhotoService } from './workPhotos.service'
+import config from '../../config'
 
 const connectOneDrive = catchAsync(async (req, res) => {
   const result = await WorkPhotoService.connectOneDrive(req.params.companyId)
@@ -17,6 +18,7 @@ const connectOneDrive = catchAsync(async (req, res) => {
 const oneDriveRefreshToken = catchAsync(async (req, res) => {
   const { code, state: companyCode } = req.query;
   const result = await WorkPhotoService.oneDriveRefreshToken(code as string, companyCode as string)
+  res.redirect(`${config.payment_success_url}`);
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
