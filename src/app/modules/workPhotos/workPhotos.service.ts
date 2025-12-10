@@ -155,7 +155,6 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   if (!workPhoto) {
     throw new AppError(httpStatus.CONFLICT, 'Work photo not created!')
   }
-  console.log('Company OneDrive:', { company })
 
   // যদি OneDrive কানেক্টেড থাকে + ফাইল থাকে → তবেই আপলোড করো
   if (company.oneDriveConnected && file) {
