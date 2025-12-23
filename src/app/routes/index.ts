@@ -6,6 +6,7 @@ import { contentsRoutes } from '../modules/contents/contents.route'
 import { NotificationRoutes } from '../modules/notification/notification.route'
 import { WorkPhotoRoutes } from '../modules/workPhotos/workPhotos.route'
 import { MetaRoutes } from '../modules/meta/meta.route'
+import { ProjectRoutes } from '../modules/project/project.route'
 
 const router = Router()
 
@@ -21,6 +22,10 @@ const moduleRoutes = [
   {
     path: '/otp',
     route: otpRoutes,
+  },
+  {
+    path: '/projects',
+    route: ProjectRoutes,
   },
   {
     path: '/work-photos',
