@@ -4,7 +4,7 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { TProject } from './project.interface'
 import { Project } from './project.model'
 import { User } from '../user/user.model'
-import { uploadToS3 } from '../../utils/s3'
+import { WorkPhoto } from '../workPhotos/workPhotos.model'
 
 const createProjectIntoDB = async (payload: TProject, userId: string) => {
   // Validate user
@@ -22,7 +22,7 @@ const createProjectIntoDB = async (payload: TProject, userId: string) => {
     throw new AppError(httpStatus.CONFLICT, 'Project record not created!')
   }
 
-  return Project
+  return project
 }
 
 const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
@@ -92,10 +92,13 @@ const deleteAProjectFromDB = async (id: string) => {
     },
     { new: true },
   )
-
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Project record delete failed')
   }
+
+  // Hard delete all work photos under project
+  await WorkPhoto.deleteMany({ project: id })
+
   return result
 }
 

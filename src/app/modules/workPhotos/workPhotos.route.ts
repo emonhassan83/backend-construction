@@ -50,6 +50,12 @@ router.get(
 )
 
 router.get(
+  '/project/:projectId',
+  auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
+  WorkPhotoControllers.getWorkPhotosByProject,
+)
+
+router.get(
   '/sorted-work-photo/:workerId',
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
   WorkPhotoControllers.groupWorkPhotosByDate,

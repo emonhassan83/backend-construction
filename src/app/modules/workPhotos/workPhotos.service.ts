@@ -14,6 +14,7 @@ import { getAccessTokenFromRefresh, uploadToOneDrive } from './workPhotos.utils'
 import { encrypt } from '../../utils/encryption'
 import crypto from 'crypto'
 import { OneDriveAuthTemp } from '../oneDriveAuthTemp/oneDriveAuthTemp.model'
+import { Project } from '../project/project.model'
 
 export const scheduleOldWorkImageCleanup = () => {
   // Runs every day at 2 AM
@@ -112,7 +113,7 @@ const oneDriveRefreshToken = async (code: string, state: string) => {
 }
 
 const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
-  const { latitude, longitude } = payload
+  const { latitude, longitude, project: projectId } = payload
 
   // Validate User
   const user = await User.findById(userId)
@@ -129,9 +130,16 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
   }
 
+  // project validation
+  const project = await User.findById(projectId)
+  if (!project || project.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
+  }
+
   // Assign meta info
   payload.author = user._id
   payload.company = company._id
+  payload.project = project._id
 
   let uploadedImageUrl = null
 
@@ -155,6 +163,13 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   if (!workPhoto) {
     throw new AppError(httpStatus.CONFLICT, 'Work photo not created!')
   }
+
+  // 🔥 INCREMENT project photo count (+1)
+  await Project.findByIdAndUpdate(
+    project._id,
+    { $inc: { photosCount: 1 } },
+    { new: true },
+  )
 
   // যদি OneDrive কানেক্টেড থাকে + ফাইল থাকে → তবেই আপলোড করো
   if (company.oneDriveConnected && file) {
@@ -379,17 +394,18 @@ const deleteAWorkPhotoFromDB = async (id: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
   }
 
-  const result = await WorkPhoto.findByIdAndUpdate(
-    id,
-    {
-      isDeleted: true,
-    },
-    { new: true },
-  )
-
+  const result = await WorkPhoto.findByIdAndDelete(id)
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record Delete failed')
   }
+
+  // 🔥 DECREMENT project photo count (-1)
+  await Project.findByIdAndUpdate(
+    workPhoto.project,
+    { $inc: { photosCount: -1 } },
+    { new: true },
+  )
+
   return result
 }
 

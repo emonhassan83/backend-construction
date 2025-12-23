@@ -4,6 +4,7 @@ export type TWorkPhoto = {
   _id?: string
   author: Types.ObjectId
   company: Types.ObjectId
+  project: Types.ObjectId
   image: string
   latitude: number
   longitude: number
