@@ -5,7 +5,7 @@ const projectSchema = new Schema<TProject>(
   {
     author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     name: { type: String, required: true },
-    photosCount: { type: Number, required: true },
+    photosCount: { type: Number, default: 0 },
     isDeleted: { type: Boolean, default: false },
   },
   {

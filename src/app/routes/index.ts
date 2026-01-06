@@ -5,8 +5,8 @@ import { otpRoutes } from '../modules/otp/otp.route'
 import { contentsRoutes } from '../modules/contents/contents.route'
 import { NotificationRoutes } from '../modules/notification/notification.route'
 import { WorkPhotoRoutes } from '../modules/workPhotos/workPhotos.route'
-import { MetaRoutes } from '../modules/meta/meta.route'
 import { ProjectRoutes } from '../modules/project/project.route'
+import { MetaRoutes } from '../modules/meta/meta.route'
 
 const router = Router()
 

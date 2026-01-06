@@ -5,7 +5,7 @@ const workPhotosSchema = new Schema<TWorkPhoto>(
   {
     author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     company: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    project: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
+    project: { type: Schema.Types.ObjectId, ref: 'Project', required: false },
     image: { type: String, required: true },
     latitude: { type: Number, required: true },
     longitude: { type: Number, required: true },

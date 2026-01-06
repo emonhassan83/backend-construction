@@ -45,6 +45,58 @@ const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
   }
 }
 
+const getAllMyFromDB = async (query: Record<string, unknown>) => {
+  const userId = query.author as string
+
+  // রিয়েল প্রজেক্টগুলো নাও (শুধু দরকারি ফিল্ড)
+  const projectQuery = new QueryBuilder(
+    // @ts-ignore
+    Project.find({ author: userId, isDeleted: false }).select(
+      '_id name photosCount',
+    ), // শুধু এই ফিল্ডগুলো নিবে
+    query,
+  )
+    .search(['name'])
+    .filter()
+    .sort()
+    .paginate()
+    .fields()
+
+  const realProjects = await projectQuery.modelQuery
+
+  // ক্লিন করে isDefault যোগ করো
+  const cleanedRealProjects = realProjects.map((proj: any) => ({
+    _id: proj._id,
+    name: proj.name,
+    photosCount: proj.photosCount,
+    isDefault: false,
+  }))
+
+  const meta = await projectQuery.countTotal()
+
+  // "Others" কাউন্ট
+  const othersCount = await WorkPhoto.countDocuments({
+    author: userId,
+    $or: [{ project: null }, { project: { $exists: false } }],
+  })
+
+  // Others প্রজেক্ট (ক্লিন)
+  const othersProject = {
+    _id: null,
+    name: 'Others',
+    photosCount: othersCount,
+    isDefault: true,
+  }
+
+  // ফাইনাল রেজাল্ট
+  const result = [...cleanedRealProjects, othersProject]
+
+  return {
+    meta,
+    result,
+  }
+}
+
 const getAProjectsFromDB = async (id: string) => {
   const project = await Project.findById(id).populate([
     { path: 'author', select: 'name email photoUrl' },
@@ -105,6 +157,7 @@ const deleteAProjectFromDB = async (id: string) => {
 export const ProjectService = {
   createProjectIntoDB,
   getAllProjectsFromDB,
+  getAllMyFromDB,
   getAProjectsFromDB,
   updateProjectFromDB,
   deleteAProjectFromDB,

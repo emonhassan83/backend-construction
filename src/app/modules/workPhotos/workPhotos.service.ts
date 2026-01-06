@@ -10,7 +10,10 @@ import { format, isToday, isYesterday, subDays } from 'date-fns'
 import axios from 'axios'
 import * as fs from 'fs'
 import config from '../../config'
-import { getAccessTokenFromRefresh, uploadToOneDrive } from './workPhotos.utils'
+import {
+  ensureFolder,
+  getAccessTokenFromRefresh
+} from './workPhotos.utils'
 import { encrypt } from '../../utils/encryption'
 import crypto from 'crypto'
 import { OneDriveAuthTemp } from '../oneDriveAuthTemp/oneDriveAuthTemp.model'
@@ -182,11 +185,26 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
         return workPhoto
       }
 
-      // নতুন স্ট্রাকচার: WorkerPhotos/workerName/
-      const folderPath = `WorkerPhotos/${user.name}` // <-- এখানে user.name দিয়ে ফোল্ডার
-      const fileName = `${new Date().toISOString().split('T')[0]}_${Date.now()}_${file.originalname}` // অপশনাল: ডুপ্লিকেট এড়ানোর জন্য
+      // 🔥 নতুন ফোল্ডার স্ট্রাকচার লজিক
+      let folderPath: string
 
-      // Get file data
+      if (payload.project && project) {
+        // project থাকলে → workphoto/{project_name}
+        const projectName = project.name
+          .trim()
+          .replace(/[^a-zA-Z0-9\-_]/g, '_') // special char safe করো
+          .replace(/\s+/g, '_')
+
+        folderPath = `workphoto/${projectName}`
+      } else {
+        // project না থাকলে → workphotos/others
+        folderPath = `workphotos/others`
+      }
+
+      // ফাইল নাম (ডুপ্লিকেট এড়ানোর জন্য টাইমস্ট্যাম্প)
+      const fileName = `${Date.now()}_${file.originalname}`
+
+      // ফাইল ডাটা রেডি করো
       let fileData: Buffer
       if (file.buffer) {
         fileData = file.buffer
@@ -196,20 +214,27 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
         throw new Error('File buffer or path not available')
       }
 
-      // OneDrive এ আপলোড
-      await uploadToOneDrive(
-        accessToken,
-        folderPath,
-        fileName,
+      // ফোল্ডার তৈরি করো (যদি না থাকে)
+      await ensureFolder(accessToken, folderPath)
+
+      // OneDrive-এ আপলোড
+      await axios.put(
+        `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${fileName}:/content`,
         fileData,
-        file.mimetype,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': file.mimetype || 'application/octet-stream',
+          },
+        },
       )
 
       console.log(`OneDrive upload successful: ${folderPath}/${fileName}`)
     } catch (err: any) {
       console.error('OneDrive upload failed (but S3 saved):', err.message)
-      // S3 তে তো সেভ হয়েই গেছে, তাই এরর থ্রো করব না
+      // S3 তে তো সেভ হয়েছে — তাই এরর থ্রো করব না
     } finally {
+      // টেম্প ফাইল ডিলিট
       if (file?.path && fs.existsSync(file.path)) {
         fs.unlinkSync(file.path)
       }

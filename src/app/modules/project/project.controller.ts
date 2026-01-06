@@ -4,7 +4,10 @@ import sendResponse from '../../utils/sendResponse'
 import { ProjectService } from './project.service'
 
 const createProject = catchAsync(async (req, res) => {
-  const result = await ProjectService.createProjectIntoDB(req.body, req.user._id)
+  const result = await ProjectService.createProjectIntoDB(
+    req.body,
+    req.user._id,
+  )
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -22,19 +25,21 @@ const getAllCompanyProjects = catchAsync(async (req, res) => {
     success: true,
     statusCode: 200,
     message: 'All project by company retrieved successfully!',
-    data: result,
+    meta: result.meta,
+    data: result.result,
   })
 })
 
 const getMyProjects = catchAsync(async (req, res) => {
   req.query['author'] = req.user._id
-  const result = await ProjectService.getAllProjectsFromDB(req.query)
+  const result = await ProjectService.getAllMyFromDB(req.query)
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
     message: 'My projects retrieved successfully!',
-    data: result,
+    meta: result.meta,
+    data: result.result,
   })
 })
 
@@ -52,7 +57,7 @@ const getAProject = catchAsync(async (req, res) => {
 const updateProject = catchAsync(async (req, res) => {
   const result = await ProjectService.updateProjectFromDB(
     req.params.id,
-    req.body
+    req.body,
   )
 
   sendResponse(res, {
