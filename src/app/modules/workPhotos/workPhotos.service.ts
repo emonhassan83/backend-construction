@@ -10,10 +10,7 @@ import { format, isToday, isYesterday, subDays } from 'date-fns'
 import axios from 'axios'
 import * as fs from 'fs'
 import config from '../../config'
-import {
-  ensureFolder,
-  getAccessTokenFromRefresh
-} from './workPhotos.utils'
+import { ensureFolder, getAccessTokenFromRefresh } from './workPhotos.utils'
 import { encrypt } from '../../utils/encryption'
 import crypto from 'crypto'
 import { OneDriveAuthTemp } from '../oneDriveAuthTemp/oneDriveAuthTemp.model'
@@ -25,21 +22,19 @@ export const scheduleOldWorkImageCleanup = () => {
     try {
       const thresholdDate = subDays(new Date(), 30)
 
-      // Directly delete in one query instead of finding + deleting
       const result = await WorkPhoto.deleteMany({
         createdAt: { $lt: thresholdDate },
-        isDeleted: false,
       })
 
       if (result.deletedCount && result.deletedCount > 0) {
         console.log(
-          `[CRON] ✅ Deleted ${result.deletedCount} old work images (older than 30 days).`,
+          `[CRON] ✅ Deleted ${result.deletedCount} work photos older than 30 days.`,
         )
       } else {
-        console.log('[CRON] 📭 No old work images found for deletion.')
+        console.log('[CRON] 📭 No old work photos to delete.')
       }
     } catch (error) {
-      console.error('[CRON] ❌ Error deleting old work images:', error)
+      console.error('[CRON] ❌ Work photo cleanup failed:', error)
     }
   })
 }
@@ -134,15 +129,18 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   }
 
   // project validation
-  const project = await User.findById(projectId)
-  if (!project || project.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
+  let project = null
+  if (projectId) {
+    project = await Project.findById(projectId)
+    if (!project || project.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
+    }
   }
 
   // Assign meta info
   payload.author = user._id
   payload.company = company._id
-  payload.project = project._id
+  payload.project = project?._id || null
 
   let uploadedImageUrl = null
 
@@ -168,11 +166,13 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   }
 
   // 🔥 INCREMENT project photo count (+1)
-  await Project.findByIdAndUpdate(
-    project._id,
-    { $inc: { photosCount: 1 } },
-    { new: true },
-  )
+  if (project) {
+    await Project.findByIdAndUpdate(
+      project._id,
+      { $inc: { photosCount: 1 } },
+      { new: true },
+    )
+  }
 
   // যদি OneDrive কানেক্টেড থাকে + ফাইল থাকে → তবেই আপলোড করো
   if (company.oneDriveConnected && file) {

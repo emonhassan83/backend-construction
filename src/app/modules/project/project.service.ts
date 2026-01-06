@@ -73,10 +73,10 @@ const getAllMyFromDB = async (query: Record<string, unknown>) => {
 
   const meta = await projectQuery.countTotal()
 
-  // Get Others photosCount 
+  // Get Others photosCount
   const othersCount = await WorkPhoto.countDocuments({
-    author: userId,
-    $or: [{ project: null }, { project: { $exists: false } }],
+    company: userId,
+    project: { $in: [null] },
   })
 
   // Others Project object

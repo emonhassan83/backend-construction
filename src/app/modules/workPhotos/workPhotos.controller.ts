@@ -75,7 +75,7 @@ const getWorkPhotosByProject = catchAsync(async (req, res) => {
 })
 
 const getDefaultPhotosByCompany = catchAsync(async (req, res) => {
-  req.query['author'] = req.params.companyId
+  req.query['company'] = req.params.companyId
   req.query['project'] = undefined
   const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
 
