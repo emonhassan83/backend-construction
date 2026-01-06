@@ -74,6 +74,19 @@ const getWorkPhotosByProject = catchAsync(async (req, res) => {
   })
 })
 
+const getDefaultPhotosByCompany = catchAsync(async (req, res) => {
+  req.query['author'] = req.params.companyId
+  req.query['project'] = undefined
+  const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'All Work photos retrieved successfully!',
+    data: result,
+  })
+})
+
 const getMyWorkPhotos = catchAsync(async (req, res) => {
   req.query['author'] = req.user._id
   const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
@@ -141,6 +154,7 @@ export const WorkPhotoControllers = {
   uploadFileOneDrive,
   createWorkPhoto,
   getWorkPhotosByProject,
+  getDefaultPhotosByCompany,
   getAllWorkersWorkPhotos,
   getMyWorkPhotos,
   groupWorkPhotosByDate,

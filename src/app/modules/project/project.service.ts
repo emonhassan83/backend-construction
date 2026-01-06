@@ -48,12 +48,11 @@ const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
 const getAllMyFromDB = async (query: Record<string, unknown>) => {
   const userId = query.author as string
 
-  // রিয়েল প্রজেক্টগুলো নাও (শুধু দরকারি ফিল্ড)
   const projectQuery = new QueryBuilder(
     // @ts-ignore
     Project.find({ author: userId, isDeleted: false }).select(
       '_id name photosCount',
-    ), // শুধু এই ফিল্ডগুলো নিবে
+    ),
     query,
   )
     .search(['name'])
@@ -64,7 +63,7 @@ const getAllMyFromDB = async (query: Record<string, unknown>) => {
 
   const realProjects = await projectQuery.modelQuery
 
-  // ক্লিন করে isDefault যোগ করো
+  // Added isDefault field and cleaned result
   const cleanedRealProjects = realProjects.map((proj: any) => ({
     _id: proj._id,
     name: proj.name,
@@ -74,13 +73,13 @@ const getAllMyFromDB = async (query: Record<string, unknown>) => {
 
   const meta = await projectQuery.countTotal()
 
-  // "Others" কাউন্ট
+  // Get Others photosCount 
   const othersCount = await WorkPhoto.countDocuments({
     author: userId,
     $or: [{ project: null }, { project: { $exists: false } }],
   })
 
-  // Others প্রজেক্ট (ক্লিন)
+  // Others Project object
   const othersProject = {
     _id: null,
     name: 'Others',
@@ -88,7 +87,7 @@ const getAllMyFromDB = async (query: Record<string, unknown>) => {
     isDefault: true,
   }
 
-  // ফাইনাল রেজাল্ট
+  // Final result with Others project
   const result = [...cleanedRealProjects, othersProject]
 
   return {

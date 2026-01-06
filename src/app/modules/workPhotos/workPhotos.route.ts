@@ -56,6 +56,12 @@ router.get(
 )
 
 router.get(
+  '/default/:companyId',
+  auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
+  WorkPhotoControllers.getDefaultPhotosByCompany,
+)
+
+router.get(
   '/sorted-work-photo/:workerId',
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
   WorkPhotoControllers.groupWorkPhotosByDate,
