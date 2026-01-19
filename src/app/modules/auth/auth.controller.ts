@@ -28,7 +28,7 @@ const loginUser = catchAsync(async (req, res) => {
 
 const loginWorker = catchAsync(async (req, res) => {
   const result = await AuthServices.loginWorker(req.body)
-  const { refreshToken, accessToken } = result
+  const { refreshToken, accessToken, user } = result
 
   res.cookie('refreshToken', refreshToken, {
     secure: config.node_env === 'production',
@@ -43,6 +43,7 @@ const loginWorker = catchAsync(async (req, res) => {
     message: 'Worker login successfully!',
     data: {
       accessToken,
+      user,
     },
   })
 })

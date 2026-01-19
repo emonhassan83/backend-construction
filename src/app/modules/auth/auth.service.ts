@@ -68,6 +68,7 @@ const loginUser = async (payload: TLoginUser) => {
       name: user.name,
       email: user.email,
       status: user.status,
+      role: user.role,
       oneDriveConnected: user.oneDriveConnected,
       oneDriveConnectedAt: user.oneDriveConnectedAt,
     },
@@ -115,6 +116,15 @@ const loginWorker = async (payload: TLoginWorker) => {
   return {
     accessToken,
     refreshToken,
+    user: {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      status: user.status,
+      role: user.role,
+      oneDriveConnected: user.oneDriveConnected,
+      oneDriveConnectedAt: user.oneDriveConnectedAt,
+    },
   }
 }
 
