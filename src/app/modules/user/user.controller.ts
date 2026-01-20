@@ -4,6 +4,7 @@ import sendResponse from '../../utils/sendResponse'
 import { UserService } from './user.service'
 import { Request, Response } from 'express'
 import { uploadToS3 } from '../../utils/s3'
+import { USER_ROLE } from './user.constant'
 
 const addACompany = catchAsync(async (req, res) => {
   const result = await UserService.addACompanyIntoDB(req?.body)
@@ -43,6 +44,7 @@ const getAllUsers = catchAsync(async (req, res) => {
 
 const getUsersByCompany = catchAsync(async (req, res) => {
   req.query['company'] = req.user._id
+  req.query['role'] = USER_ROLE.worker
   const result = await UserService.getAllUsersFromDB(req.query)
 
   sendResponse(res, {
