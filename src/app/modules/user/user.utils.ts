@@ -4,14 +4,14 @@ import { TUser } from './user.interface'
 import { findAdmin } from '../../utils/findAdmin'
 import { sendNotification } from '../../utils/sentNotification'
 import emailSender from '../../utils/emailSender'
+import { Project } from '../project/project.model'
 
 export const sendUserStatusNotifYToAdmin = async (
   status: 'active' | 'blocked',
   user: TUser,
 ) => {
   const admin = await findAdmin()
-  if (!admin || !admin?.fcmToken)
-    throw new Error('Admin not found or missing FCM token!')
+  if (!admin || !admin?.fcmToken) return
 
   let message = ''
   let description = ''
@@ -39,7 +39,7 @@ export const sendUserStatusNotifYToUser = async (
   status: 'active' | 'blocked',
   user: TUser,
 ) => {
-  if (!user?.fcmToken) throw new Error('User FCM token is missing!')
+  if (!user?.fcmToken) return
 
   let message = ''
   let description = ''
@@ -88,4 +88,30 @@ export const addCompanyInvitationMail = async (
         </div>
       `,
   )
+}
+
+// Helper function to create default "Others" project (can be moved to service)
+export const createDefaultOthersProject = async (company: any) => {
+  const existingOthers = await Project.findOne({
+    author: company._id,
+    name: 'Others',
+    isDeleted: false,
+  })
+
+  if (existingOthers) {
+    console.log(`"Others" project already exists for company ${company._id}`)
+    return existingOthers
+  }
+
+  const othersProject = new Project({
+    author: company._id,
+    name: 'Others',
+    photosCount: 0,
+    isDeleted: false,
+  })
+
+  await othersProject.save()
+  console.log(`Created default "Others" project for company ${company._id}`)
+
+  return othersProject
 }

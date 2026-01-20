@@ -128,25 +128,42 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
   }
 
-  // project validation
   let project = null
+  let finalProjectId = null
+
+  // যদি ইউজার project সিলেক্ট করে থাকে
   if (projectId) {
     project = await Project.findById(projectId)
     if (!project || project.isDeleted) {
       throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
     }
+    finalProjectId = project._id
+  } 
+  // যদি project না সিলেক্ট করে → company-র "Others" প্রজেক্ট খুঁজে নাও
+  else {
+    // "Others" প্রজেক্ট খুঁজে বের করো (company-র অধীনে)
+    const othersProject = await Project.findOne({
+      author: company._id,          // company হল author
+      name: "Others",
+      isDeleted: false,
+    })
+
+    if (!othersProject) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Default "Others" project not found for this company!')
+    }
+
+    finalProjectId = othersProject._id
   }
 
   // Assign meta info
   payload.author = user._id
   payload.company = company._id
-  payload.project = project?._id || null
+  payload.project = finalProjectId   // এখানে সবসময় একটা project _id থাকবে (null না)
 
   let uploadedImageUrl = null
 
-  // শুধু যদি ফাইল থাকে তবেই প্রসেস করো
+  // S3 আপলোড (যদি ফাইল থাকে)
   if (file) {
-    // S3 তে আপলোড
     uploadedImageUrl = await uploadToS3({
       file,
       fileName: `images/work-photos/${user.name}/${Date.now()}_${file.originalname}`,
@@ -165,46 +182,32 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
     throw new AppError(httpStatus.CONFLICT, 'Work photo not created!')
   }
 
-  // 🔥 INCREMENT project photo count (+1)
-  if (project) {
-    await Project.findByIdAndUpdate(
-      project._id,
-      { $inc: { photosCount: 1 } },
-      { new: true },
-    )
-  }
+  // 🔥 INCREMENT project photo count (+1) — সবসময় increment হবে (null না)
+  await Project.findByIdAndUpdate(
+    finalProjectId,
+    { $inc: { photosCount: 1 } },
+    { new: true },
+  )
 
-  // যদি OneDrive কানেক্টেড থাকে + ফাইল থাকে → তবেই আপলোড করো
+  // OneDrive আপলোড (যদি কানেক্টেড থাকে)
   if (company.oneDriveConnected && file) {
     try {
-      const accessToken = await getAccessTokenFromRefresh(
-        company._id.toString(),
-      )
+      const accessToken = await getAccessTokenFromRefresh(company._id.toString())
       if (!accessToken) {
         console.log('OneDrive: Access token not available, skipping upload')
         return workPhoto
       }
 
-      // 🔥 নতুন ফোল্ডার স্ট্রাকচার লজিক
-      let folderPath: string
+      // ফোল্ডার পাথ — এখন project থাকবেই (Others বা real)
+      const project = await Project.findById(finalProjectId)
+      const projectName = project?.name || 'Others'
 
-      if (payload.project && project) {
-        // project থাকলে → workphoto/{project_name}
-        const projectName = project.name
-          .trim()
-          .replace(/[^a-zA-Z0-9\-_]/g, '_') // special char safe করো
-          .replace(/\s+/g, '_')
+      let folderPath: string = `workphoto/${projectName}`
 
-        folderPath = `workphoto/${projectName}`
-      } else {
-        // project না থাকলে → workphotos/others
-        folderPath = `workphotos/others`
-      }
-
-      // ফাইল নাম (ডুপ্লিকেট এড়ানোর জন্য টাইমস্ট্যাম্প)
+      // ফাইল নাম
       const fileName = `${Date.now()}_${file.originalname}`
 
-      // ফাইল ডাটা রেডি করো
+      // ফাইল ডাটা
       let fileData: Buffer
       if (file.buffer) {
         fileData = file.buffer
@@ -214,10 +217,8 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
         throw new Error('File buffer or path not available')
       }
 
-      // ফোল্ডার তৈরি করো (যদি না থাকে)
+      // ফোল্ডার তৈরি + আপলোড
       await ensureFolder(accessToken, folderPath)
-
-      // OneDrive-এ আপলোড
       await axios.put(
         `https://graph.microsoft.com/v1.0/me/drive/root:/${folderPath}/${fileName}:/content`,
         fileData,
@@ -232,9 +233,7 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
       console.log(`OneDrive upload successful: ${folderPath}/${fileName}`)
     } catch (err: any) {
       console.error('OneDrive upload failed (but S3 saved):', err.message)
-      // S3 তে তো সেভ হয়েছে — তাই এরর থ্রো করব না
     } finally {
-      // টেম্প ফাইল ডিলিট
       if (file?.path && fs.existsSync(file.path)) {
         fs.unlinkSync(file.path)
       }

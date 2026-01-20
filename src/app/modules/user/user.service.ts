@@ -6,6 +6,7 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { USER_ROLE, USER_STATUS, UserSearchableFields } from './user.constant'
 import {
   addCompanyInvitationMail,
+  createDefaultOthersProject,
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
@@ -16,8 +17,8 @@ import {
 } from '../../utils/generateUserName'
 import { WorkPhoto } from '../workPhotos/workPhotos.model'
 
-const addACompanyIntoDB = async (payload: TUser) => {
-  if (payload.role === 'admin') {
+const addACompanyIntoDB = async (payload: any) => {
+  if (payload.role === USER_ROLE.admin) {
     throw new AppError(
       httpStatus.FORBIDDEN,
       'You cannot directly assign admin role',
@@ -31,56 +32,78 @@ const addACompanyIntoDB = async (payload: TUser) => {
     )
   }
 
-  // 🟡 Prepare final payload with default values if worker
+  // Prepare final payload with default values
   const userPayload = {
     ...payload,
-    ...{
-      verification: {
-        otp: '0',
-        status: true,
-      },
-      expireAt: null,
+    verification: {
+      otp: '0',
+      status: true,
     },
+    expireAt: null,
   }
 
+  // Check for existing user
   const existingUser = await User.findOne({ email: userPayload.email })
   if (existingUser) {
-    // 🟡 Soft deleted user — recreate
+    // Reactivate soft-deleted user
     if (existingUser.isDeleted) {
       existingUser.set({ ...userPayload, isDeleted: false })
       const user = await existingUser.save()
+
+      // If it's a company reactivation → create "Others" if missing
+      if (user.role === USER_ROLE.project_manager) {
+        await createDefaultOthersProject(user)
+      }
+
       return user
     }
 
-    // 🟡 Unverified user — update fields and re-save
+    // Update unverified user
     if (!existingUser.verification?.status) {
       existingUser.set({ ...userPayload })
       const user = await existingUser.save()
+
+      // If it's a company → create "Others"
+      if (user.role === USER_ROLE.project_manager) {
+        await createDefaultOthersProject(user)
+      }
+
       return user
     }
 
-    // 🔴 Already active user
     throw new AppError(
       httpStatus.FORBIDDEN,
       'User already exists with this email',
     )
   }
 
-  userPayload.role = USER_ROLE.project_manager // Ensure role is set to company
+  // New user — set role to 'company' if not already set
+  userPayload.role = USER_ROLE.project_manager
   userPayload.password = generateCryptoString(12)
 
-  // 🟢 New user
   if (!userPayload.password) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
   }
 
-  const newUser = new User(userPayload)
-  await newUser.save()
+  const newCompany = new User(userPayload)
+  await newCompany.save()
 
-  // Send email to the therapist
+  // 🔥 Step 1: Create default "Others" project for this company
+  await createDefaultOthersProject(newCompany)
+
+  // Step 2: If this is a worker being added under a company, save company _id
+  await User.findByIdAndUpdate(
+    newCompany._id,
+    {
+      company: newCompany._id,
+    },
+    { new: true },
+  )
+
+  // Send invitation email
   await addCompanyInvitationMail(userPayload.email, userPayload.password)
 
-  return newUser
+  return newCompany
 }
 
 const addAWorkerIntoDB = async (payload: TUser, userId: string) => {

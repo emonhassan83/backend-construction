@@ -32,7 +32,7 @@ const getAllCompanyProjects = catchAsync(async (req, res) => {
 
 const getMyProjects = catchAsync(async (req, res) => {
   req.query['author'] = req.user._id
-  const result = await ProjectService.getAllMyFromDB(req.query)
+  const result = await ProjectService.getAllProjectsFromDB(req.query)
 
   sendResponse(res, {
     success: true,

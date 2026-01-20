@@ -45,57 +45,6 @@ const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
   }
 }
 
-const getAllMyFromDB = async (query: Record<string, unknown>) => {
-  const userId = query.author as string
-
-  const projectQuery = new QueryBuilder(
-    // @ts-ignore
-    Project.find({ author: userId, isDeleted: false }).select(
-      '_id name photosCount',
-    ),
-    query,
-  )
-    .search(['name'])
-    .filter()
-    .sort()
-    .paginate()
-    .fields()
-
-  const realProjects = await projectQuery.modelQuery
-
-  // Added isDefault field and cleaned result
-  const cleanedRealProjects = realProjects.map((proj: any) => ({
-    _id: proj._id,
-    name: proj.name,
-    photosCount: proj.photosCount,
-    isDefault: false,
-  }))
-
-  const meta = await projectQuery.countTotal()
-
-  // Get Others photosCount
-  const othersCount = await WorkPhoto.countDocuments({
-    company: userId,
-    project: { $in: [null] },
-  })
-
-  // Others Project object
-  const othersProject = {
-    _id: null,
-    name: 'Others',
-    photosCount: othersCount,
-    isDefault: true,
-  }
-
-  // Final result with Others project
-  const result = [...cleanedRealProjects, othersProject]
-
-  return {
-    meta,
-    result,
-  }
-}
-
 const getAProjectsFromDB = async (id: string) => {
   const project = await Project.findById(id).populate([
     { path: 'author', select: 'name email photoUrl' },
@@ -156,7 +105,6 @@ const deleteAProjectFromDB = async (id: string) => {
 export const ProjectService = {
   createProjectIntoDB,
   getAllProjectsFromDB,
-  getAllMyFromDB,
   getAProjectsFromDB,
   updateProjectFromDB,
   deleteAProjectFromDB,
