@@ -14,7 +14,7 @@ const emailSender = async (email: string, subject: string, html: string) => {
     }
 
     const res = await axios.post(
-      'https://construction-chi-ten.vercel.app/',
+      'https://construction-sigma-sage.vercel.app/',
       emailData,
       {
         headers: {
