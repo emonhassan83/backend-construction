@@ -90,7 +90,7 @@ const resendOtp = async (email: string) => {
         verification: {
           otp,
           expiresAt,
-          status: false,
+          status: true,
         },
       },
     },
