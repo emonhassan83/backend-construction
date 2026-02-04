@@ -39,7 +39,7 @@ export const sendUserStatusNotifYToUser = async (
   status: 'active' | 'blocked',
   user: TUser,
 ) => {
-  if (!user?.fcmToken) return
+  if (!user || !user?.fcmToken) return
 
   let message = ''
   let description = ''

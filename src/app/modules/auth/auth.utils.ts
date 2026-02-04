@@ -41,6 +41,8 @@ export const authNotifyUser = async (
   action: 'PASSWORD_CHANGE' | 'PASSWORD_FORGET' | 'PASSWORD_RESET',
   user: TUser,
 ) => {
+  if (!user || !user?.fcmToken) return
+
   // Determine the message and description based on the action
   let message
   let description

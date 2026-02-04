@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt'
-import httpStatus, { status } from 'http-status'
+import httpStatus from 'http-status'
 import config from '../../config'
 import AppError from '../../errors/AppError'
 import { JwtPayload } from 'jsonwebtoken'
