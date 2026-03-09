@@ -319,7 +319,7 @@ const getAllWorkPhotosFromDB = async (query: Record<string, unknown>) => {
 
 const groupWorkPhotosByDate = async (query: Record<string, unknown>) => {
   const photos = await WorkPhoto.find(query)
-    .select('_id image location locationUrl createdAt')
+    .select('_id image location locationUrl captureAt createdAt')
     .sort({ createdAt: -1 })
 
   const grouped: Record<string, typeof photos> = {}
@@ -365,7 +365,7 @@ const getAWorkPhotosFromDB = async (id: string) => {
       { path: 'author', select: 'name email photoUrl' },
       { path: 'company', select: 'name email photoUrl' },
     ])
-    .select('_id author company image locationUrl latitude longitude createdAt')
+    .select('_id author company image locationUrl latitude longitude captureAt createdAt')
   if (!workPhoto || workPhoto?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
   }
