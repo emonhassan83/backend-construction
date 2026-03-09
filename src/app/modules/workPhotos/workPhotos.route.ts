@@ -13,7 +13,7 @@ const upload = multer({ storage })
 
 router.post(
   '/upload-one-drive',
-  auth(USER_ROLE.worker),
+  auth(USER_ROLE.project_manager, USER_ROLE.worker),
   upload.single('image'),
   parseData(),
   zodValidationRequest(WorkPhotoValidation.createValidationSchema),
@@ -22,7 +22,7 @@ router.post(
 
 router.post(
   '/',
-  auth(USER_ROLE.worker),
+  auth(USER_ROLE.project_manager, USER_ROLE.worker),
   upload.single('image'),
   parseData(),
   zodValidationRequest(WorkPhotoValidation.createValidationSchema),
