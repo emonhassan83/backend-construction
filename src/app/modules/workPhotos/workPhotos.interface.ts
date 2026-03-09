@@ -11,6 +11,7 @@ export type TWorkPhoto = {
   location: string
   locationUrl: string
   isDeleted: boolean
+  captureAt: String
   createdAt: Date
 }
 
