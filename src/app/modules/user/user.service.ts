@@ -16,6 +16,8 @@ import {
   generateUniqueUsername,
 } from '../../utils/generateUserName'
 import { WorkPhoto } from '../workPhotos/workPhotos.model'
+import axios from 'axios'
+import { encrypt } from '../../utils/encryption'
 
 const addACompanyIntoDB = async (payload: any) => {
   if (payload.role === USER_ROLE.admin) {
@@ -312,6 +314,97 @@ const deleteAUserFromDB = async (userId: string) => {
   return updatedUser
 }
 
+// Company admin Nextcloud/kDrive connect করবে
+const connectNextcloud = async (companyId: string, payload: any) => {
+  const { nextcloudUrl, username, password } = payload;
+
+  // 1. Validate company exists
+  const company = await User.findById(companyId);
+  if (!company || company.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
+  }
+
+  if (company.role !== 'project_manager') {
+    throw new AppError(httpStatus.FORBIDDEN, 'Only company admins can connect Nextcloud!');
+  }
+
+  // 2. Test Nextcloud connection
+  try {
+    await axios({
+      method: 'PROPFIND',
+      url: `${nextcloudUrl}/remote.php/dav/files/${username}/`,
+      auth: { username, password },
+      headers: { 'Depth': '0' },
+    });
+  } catch (err: any) {
+    console.error('Nextcloud connection test failed:', err.response?.data || err.message);
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Nextcloud connection failed! Check URL, username, and password.',
+    );
+  }
+
+  // 3. Save credentials (encrypted password)
+  const updatedCompany = await User.findByIdAndUpdate(
+    companyId,
+    {
+      nextcloudUrl,
+      nextcloudUsername: username,
+      nextcloudPassword: encrypt(password), // Encrypt করে save
+      nextcloudConnected: true,
+      nextcloudConnectedAt: new Date(),
+    },
+    { new: true },
+  );
+
+  return {
+    message: 'Nextcloud connected successfully!',
+    nextcloudUrl: updatedCompany?.nextcloudUrl,
+    nextcloudUsername: updatedCompany?.nextcloudUsername,
+    nextcloudConnected: updatedCompany?.nextcloudConnected,
+  };
+};
+
+// Company admin Nextcloud disconnect করবে
+const disconnectNextcloud = async (companyId: string) => {
+  const company = await User.findById(companyId);
+  if (!company || company.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
+  }
+
+  if (company.role !== 'project_manager') {
+    throw new AppError(httpStatus.FORBIDDEN, 'Only company admins can disconnect Nextcloud!');
+  }
+
+  await User.findByIdAndUpdate(companyId, {
+    nextcloudUrl: null,
+    nextcloudUsername: null,
+    nextcloudPassword: null,
+    nextcloudConnected: false,
+    nextcloudConnectedAt: null,
+  });
+
+  return { message: 'Nextcloud disconnected successfully!' };
+};
+
+// Company Nextcloud status check
+const getNextcloudStatus = async (companyId: string) => {
+  const company = await User.findById(companyId).select(
+    'nextcloudUrl nextcloudUsername nextcloudConnected nextcloudConnectedAt',
+  );
+
+  if (!company || company.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
+  }
+
+  return {
+    connected: company.nextcloudConnected || false,
+    url: company.nextcloudUrl || null,
+    username: company.nextcloudUsername || null,
+    connectedAt: company.nextcloudConnectedAt || null,
+  };
+};
+
 export const UserService = {
   addACompanyIntoDB,
   addAWorkerIntoDB,
@@ -320,4 +413,8 @@ export const UserService = {
   changeUserStatusFromDB,
   updateUserInfoFromDB,
   deleteAUserFromDB,
+
+  connectNextcloud,
+  disconnectNextcloud,
+  getNextcloudStatus,
 }

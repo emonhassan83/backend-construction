@@ -25,6 +25,19 @@ router.post(
   UserControllers.addAWorker,
 )
 
+router.post(
+  '/connect-nextcloud',
+  auth(USER_ROLE.project_manager),
+  zodValidationRequest(UserValidation.nextcloudConnectSchema),
+  UserControllers.connectNextcloud,
+);
+
+router.post(
+  '/disconnect-nextcloud',
+  auth(USER_ROLE.project_manager),
+  UserControllers.disconnectNextcloud,
+);
+
 router.patch(
   '/change-status',
   auth(USER_ROLE.admin, USER_ROLE.project_manager),
@@ -66,6 +79,12 @@ router.get(
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
   UserControllers.getMyProfile,
 )
+
+router.get(
+  '/nextcloud-status',
+  auth(USER_ROLE.project_manager),
+  UserControllers.getNextcloudStatus,
+);
 
 router.get('/', auth(USER_ROLE.admin, USER_ROLE.project_manager), UserControllers.getAllUsers)
 

@@ -66,9 +66,18 @@ const changeStatusValidationSchema = z.object({
   }),
 })
 
+const nextcloudConnectSchema = z.object({
+  body: z.object({
+    nextcloudUrl: z.string().url(),
+    username: z.string().min(1),
+    password: z.string().min(1),
+  }),
+});
+
 export const UserValidation = {
   createCompanyValidationSchema,
   createWorkerValidationSchema,
   updateValidationSchema,
   changeStatusValidationSchema,
+  nextcloudConnectSchema
 }

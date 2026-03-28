@@ -107,6 +107,13 @@ const userSchema = new Schema<TUser, UserModel>(
       type: Boolean,
       default: false,
     },
+
+    // Nextcloud/kDrive (শুধু company admin-এর জন্য)
+    nextcloudUrl: { type: String },
+    nextcloudUsername: { type: String },
+    nextcloudPassword: { type: String }, // Encrypted
+    nextcloudConnected: { type: Boolean, default: false },
+    nextcloudConnectedAt: { type: Date },
   },
   {
     timestamps: true,

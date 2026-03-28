@@ -140,6 +140,40 @@ const deleteAUser = catchAsync(async (req, res) => {
   })
 })
 
+// For nextcloud apis
+const connectNextcloud = catchAsync(async (req, res) => {
+  const result = await UserService.connectNextcloud(req.user._id, req.body);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Nextcloud connected successfully!',
+    data: result,
+  });
+});
+
+const disconnectNextcloud = catchAsync(async (req, res) => {
+  const result = await UserService.disconnectNextcloud(req.user._id);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Nextcloud disconnected successfully!',
+    data: result,
+  });
+});
+
+const getNextcloudStatus = catchAsync(async (req, res) => {
+  const result = await UserService.getNextcloudStatus(req.user._id);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Nextcloud status retrieved!',
+    data: result,
+  });
+});
+
 export const UserControllers = {
   addACompany,
   addAWorker,
@@ -151,4 +185,7 @@ export const UserControllers = {
   updateUserInfo,
   updateMyProfile,
   deleteAUser,
+  connectNextcloud,
+  disconnectNextcloud,
+  getNextcloudStatus
 }

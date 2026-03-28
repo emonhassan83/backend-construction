@@ -29,6 +29,13 @@ export interface TUser {
   isDeleted: boolean
   createdAt?: Date
   updatedAt?: Date
+
+  //  // Nextcloud (শুধু company admin-এর জন্য)
+  nextcloudUrl?: string;
+  nextcloudUsername?: string;
+  nextcloudPassword?: string; // Encrypted
+  nextcloudConnected?: boolean;
+  nextcloudConnectedAt?: Date;
 }
 
 export interface TReqUser {
