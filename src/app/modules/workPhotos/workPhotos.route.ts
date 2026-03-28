@@ -21,6 +21,15 @@ router.post(
 )
 
 router.post(
+  '/upload-nextcloud',
+  auth(USER_ROLE.project_manager, USER_ROLE.worker),
+  upload.single('image'),
+  parseData(),
+  zodValidationRequest(WorkPhotoValidation.createValidationSchema),
+  WorkPhotoControllers.uploadFileNextcloud,
+)
+
+router.post(
   '/',
   auth(USER_ROLE.project_manager, USER_ROLE.worker),
   upload.single('image'),

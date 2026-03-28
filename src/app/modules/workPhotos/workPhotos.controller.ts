@@ -39,6 +39,17 @@ const uploadFileOneDrive = catchAsync(async (req, res) => {
   })
 })
 
+const uploadFileNextcloud = catchAsync(async (req, res) => {
+  const result = await WorkPhotoService.uploadWorkPhotoNextcloud(req.body, req.file, req.user._id)
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Upload file nextcloud successfully!',
+    data: result,
+  })
+})
+
 const createWorkPhoto = catchAsync(async (req, res) => {
   const result = await WorkPhotoService.createWorkPhotoIntoDB(req.body, req.file, req.user._id)
 
@@ -152,6 +163,7 @@ export const WorkPhotoControllers = {
   connectOneDrive,
   oneDriveRefreshToken,
   uploadFileOneDrive,
+  uploadFileNextcloud,
   createWorkPhoto,
   getWorkPhotosByProject,
   getDefaultPhotosByCompany,

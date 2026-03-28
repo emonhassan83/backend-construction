@@ -15,6 +15,7 @@ import { encrypt } from '../../utils/encryption'
 import crypto from 'crypto'
 import { OneDriveAuthTemp } from '../oneDriveAuthTemp/oneDriveAuthTemp.model'
 import { Project } from '../project/project.model'
+import { getNextcloudCredentials, uploadToNextcloud } from '../../utils/nextcloud'
 
 export const scheduleOldWorkImageCleanup = () => {
   // Runs every day at 2 AM
@@ -243,6 +244,125 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   return workPhoto
 }
 
+const uploadWorkPhotoNextcloud = async (payload: any, file: any, userId: string) => {
+  const { latitude, longitude, project: projectId } = payload;
+
+  // 1. Validate User
+  const user = await User.findById(userId);
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+  }
+  if (!user.company) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Your account has no company!');
+  }
+
+  // 2. Validate Company
+  const company = await User.findById(user.company);
+  if (!company || company.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
+  }
+
+  let finalProjectId = null;
+
+  // 3. Handle Project Selection
+  if (projectId) {
+    const project = await Project.findById(projectId);
+    if (!project || project.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Project not found!');
+    }
+    finalProjectId = project._id;
+  } else {
+    const othersProject = await Project.findOne({
+      author: company._id,
+      name: 'Others',
+      isDeleted: false,
+    });
+
+    if (!othersProject) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Default "Others" project not found!');
+    }
+
+    finalProjectId = othersProject._id;
+  }
+
+  // 4. Assign metadata
+  payload.author = user._id;
+  payload.company = company._id;
+  payload.project = finalProjectId;
+
+  let uploadedImageUrl = null;
+
+  // 5. Upload to S3 (primary storage)
+  if (file) {
+    uploadedImageUrl = await uploadToS3({
+      file,
+      fileName: `images/work-photos/${user.name}/${Date.now()}_${file.originalname}`,
+    });
+    payload.image = uploadedImageUrl;
+  }
+
+  // 6. Generate Map URL
+  if (latitude && longitude) {
+    payload.locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+  }
+
+  // 7. Save Record
+  const workPhoto = await WorkPhoto.create(payload);
+  if (!workPhoto) {
+    throw new AppError(httpStatus.CONFLICT, 'Work photo not created!');
+  }
+
+  // 8. Increment project photo count
+  await Project.findByIdAndUpdate(
+    finalProjectId,
+    { $inc: { photosCount: 1 } },
+    { new: true },
+  );
+
+  // 9. Upload to Nextcloud/kDrive (if company connected)
+  if (company.nextcloudConnected && file) {
+    try {
+      const credentials = await getNextcloudCredentials(company._id.toString());
+      
+      const project = await Project.findById(finalProjectId);
+      const projectName = project?.name || 'Others';
+      
+      const folderPath = `workphoto/${projectName}`;
+      const fileName = `${Date.now()}_${file.originalname}`;
+      
+      // Get file data
+      let fileData: Buffer;
+      if (file.buffer) {
+        fileData = file.buffer;
+      } else if (file.path && fs.existsSync(file.path)) {
+        fileData = fs.readFileSync(file.path);
+      } else {
+        throw new Error('File buffer or path not available');
+      }
+      
+      // Upload to Nextcloud
+      await uploadToNextcloud(
+        credentials,
+        folderPath,
+        fileName,
+        fileData,
+        file.mimetype || 'application/octet-stream',
+      );
+      
+      console.log(`✅ Nextcloud upload successful: ${folderPath}/${fileName}`);
+    } catch (err: any) {
+      console.error('⚠️ Nextcloud upload failed (but S3 saved):', err.message);
+      // Don't throw error - S3 upload is primary
+    } finally {
+      if (file?.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+    }
+  }
+
+  return workPhoto;
+};
+
 const createWorkPhotoIntoDB = async (
   payload: TWorkPhoto,
   file: any,
@@ -437,6 +557,7 @@ export const WorkPhotoService = {
   connectOneDrive,
   oneDriveRefreshToken,
   uploadFileOneDrive,
+  uploadWorkPhotoNextcloud,
   createWorkPhotoIntoDB,
   getAllWorkPhotosFromDB,
   getAWorkPhotosFromDB,

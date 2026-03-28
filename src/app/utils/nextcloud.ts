@@ -17,7 +17,7 @@ interface NextcloudConfig {
 }
 
 // Get Nextcloud credentials from company/user
-const getNextcloudCredentials = async (companyId: string): Promise<NextcloudConfig> => {
+export const getNextcloudCredentials = async (companyId: string): Promise<NextcloudConfig> => {
   const company = await User.findById(companyId);
   
   if (!company?.nextcloudUrl || !company?.nextcloudUsername || !company?.nextcloudPassword) {
