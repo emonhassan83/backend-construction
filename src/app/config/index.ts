@@ -43,5 +43,8 @@ export default {
     clientSecret: process.env.CLIENT_SECRET,
     tenantId: process.env.TENANT_ID,
   },
+  nextcloud: {
+    baseUrl: process.env.NEXTCLOUD_BASE_URL
+  },
   sms_auth_key: process.env.SMS_AUTH_KEY,
 }

@@ -15,7 +15,10 @@ import { encrypt } from '../../utils/encryption'
 import crypto from 'crypto'
 import { OneDriveAuthTemp } from '../oneDriveAuthTemp/oneDriveAuthTemp.model'
 import { Project } from '../project/project.model'
-import { getNextcloudCredentials, uploadToNextcloud } from '../../utils/nextcloud'
+import {
+  getNextcloudCredentials,
+  uploadToNextcloud,
+} from '../../utils/nextcloud'
 
 export const scheduleOldWorkImageCleanup = () => {
   // Runs every day at 2 AM
@@ -139,18 +142,21 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
       throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
     }
     finalProjectId = project._id
-  } 
+  }
   // যদি project না সিলেক্ট করে → company-র "Others" প্রজেক্ট খুঁজে নাও
   else {
     // "Others" প্রজেক্ট খুঁজে বের করো (company-র অধীনে)
     const othersProject = await Project.findOne({
-      author: company._id,          // company হল author
-      name: "Others",
+      author: company._id, // company হল author
+      name: 'Others',
       isDeleted: false,
     })
 
     if (!othersProject) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Default "Others" project not found for this company!')
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'Default "Others" project not found for this company!',
+      )
     }
 
     finalProjectId = othersProject._id
@@ -159,7 +165,7 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   // Assign meta info
   payload.author = user._id
   payload.company = company._id
-  payload.project = finalProjectId   // এখানে সবসময় একটা project _id থাকবে (null না)
+  payload.project = finalProjectId // এখানে সবসময় একটা project _id থাকবে (null না)
 
   let uploadedImageUrl = null
 
@@ -193,7 +199,9 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   // OneDrive আপলোড (যদি কানেক্টেড থাকে)
   if (company.oneDriveConnected && file) {
     try {
-      const accessToken = await getAccessTokenFromRefresh(company._id.toString())
+      const accessToken = await getAccessTokenFromRefresh(
+        company._id.toString(),
+      )
       if (!accessToken) {
         console.log('OneDrive: Access token not available, skipping upload')
         return workPhoto
@@ -244,72 +252,79 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   return workPhoto
 }
 
-const uploadWorkPhotoNextcloud = async (payload: any, file: any, userId: string) => {
-  const { latitude, longitude, project: projectId } = payload;
+const uploadWorkPhotoNextcloud = async (
+  payload: any,
+  file: any,
+  userId: string,
+) => {
+  const { latitude, longitude, project: projectId } = payload
 
   // 1. Validate User
-  const user = await User.findById(userId);
+  const user = await User.findById(userId)
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
   if (!user.company) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Your account has no company!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Your account has no company!')
   }
 
   // 2. Validate Company
-  const company = await User.findById(user.company);
+  const company = await User.findById(user.company)
   if (!company || company.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
   }
 
-  let finalProjectId = null;
+  let finalProjectId = null
 
   // 3. Handle Project Selection
   if (projectId) {
-    const project = await Project.findById(projectId);
+    const project = await Project.findById(projectId)
     if (!project || project.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Project not found!');
+      throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
     }
-    finalProjectId = project._id;
+    finalProjectId = project._id
   } else {
     const othersProject = await Project.findOne({
       author: company._id,
       name: 'Others',
       isDeleted: false,
-    });
+    })
 
     if (!othersProject) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Default "Others" project not found!');
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'Default "Others" project not found!',
+      )
     }
 
-    finalProjectId = othersProject._id;
+    finalProjectId = othersProject._id
   }
 
   // 4. Assign metadata
-  payload.author = user._id;
-  payload.company = company._id;
-  payload.project = finalProjectId;
+  payload.author = user._id
+  payload.company = company._id
+  payload.project = finalProjectId
 
-  let uploadedImageUrl = null;
+  let uploadedImageUrl = null
 
   // 5. Upload to S3 (primary storage)
   if (file) {
     uploadedImageUrl = await uploadToS3({
       file,
       fileName: `images/work-photos/${user.name}/${Date.now()}_${file.originalname}`,
-    });
-    payload.image = uploadedImageUrl;
+    })
+    payload.image = uploadedImageUrl
   }
 
   // 6. Generate Map URL
   if (latitude && longitude) {
-    payload.locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+    payload.locationUrl = `https://www.google.com/maps?q=${latitude},${longitude}`
   }
 
   // 7. Save Record
-  const workPhoto = await WorkPhoto.create(payload);
+  const workPhoto = await WorkPhoto.create(payload)
   if (!workPhoto) {
-    throw new AppError(httpStatus.CONFLICT, 'Work photo not created!');
+    throw new AppError(httpStatus.CONFLICT, 'Work photo not created!')
   }
 
   // 8. Increment project photo count
@@ -317,51 +332,48 @@ const uploadWorkPhotoNextcloud = async (payload: any, file: any, userId: string)
     finalProjectId,
     { $inc: { photosCount: 1 } },
     { new: true },
-  );
+  )
 
   // 9. Upload to Nextcloud/kDrive (if company connected)
   if (company.nextcloudConnected && file) {
     try {
-      const credentials = await getNextcloudCredentials(company._id.toString());
-      
-      const project = await Project.findById(finalProjectId);
-      const projectName = project?.name || 'Others';
-      
-      const folderPath = `workphoto/${projectName}`;
-      const fileName = `${Date.now()}_${file.originalname}`;
-      
-      // Get file data
-      let fileData: Buffer;
-      if (file.buffer) {
-        fileData = file.buffer;
-      } else if (file.path && fs.existsSync(file.path)) {
-        fileData = fs.readFileSync(file.path);
-      } else {
-        throw new Error('File buffer or path not available');
+      const credentials = await getNextcloudCredentials(company._id.toString())
+
+      const project = await Project.findById(finalProjectId)
+      const projectName = project?.name || 'Others'
+
+      const safeProjectName = projectName.replace(/[^a-zA-Z0-9-_]/g, '_')
+
+      const folderPath = `workphoto/${safeProjectName}`
+      const fileName = `${Date.now()}_${file.originalname}`
+
+      // Ensure buffer exists
+      if (!file.buffer) {
+        throw new Error('File buffer missing')
       }
-      
-      // Upload to Nextcloud
+
       await uploadToNextcloud(
-        credentials,
+        config.nextcloud.baseUrl!,
+        credentials.username,
+        credentials.password,
         folderPath,
         fileName,
-        fileData,
+        file.buffer,
         file.mimetype || 'application/octet-stream',
-      );
-      
-      console.log(`✅ Nextcloud upload successful: ${folderPath}/${fileName}`);
+      )
+
+      console.log(`✅ Nextcloud upload success: ${folderPath}/${fileName}`)
     } catch (err: any) {
-      console.error('⚠️ Nextcloud upload failed (but S3 saved):', err.message);
-      // Don't throw error - S3 upload is primary
+      console.error('⚠️ Nextcloud failed (S3 already saved):', err.message)
     } finally {
       if (file?.path && fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path);
+        fs.unlinkSync(file.path)
       }
     }
   }
 
-  return workPhoto;
-};
+  return workPhoto
+}
 
 const createWorkPhotoIntoDB = async (
   payload: TWorkPhoto,
@@ -485,7 +497,9 @@ const getAWorkPhotosFromDB = async (id: string) => {
       { path: 'author', select: 'name email photoUrl' },
       { path: 'company', select: 'name email photoUrl' },
     ])
-    .select('_id author company image locationUrl latitude longitude captureAt createdAt')
+    .select(
+      '_id author company image locationUrl latitude longitude captureAt createdAt',
+    )
   if (!workPhoto || workPhoto?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
   }
