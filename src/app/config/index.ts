@@ -38,6 +38,16 @@ export default {
     bucket: process.env.AWS_BUCKET_NAME,
     endpoint: process.env.SPACES_API,
   },
+  infomaniak: {
+    authUrl: process.env.INFOMANIAK_AUTH_URL,
+    storageUrl: process.env.INFOMANIAK_STORAGE_URL,
+    projectId: process.env.INFOMANIAK_PROJECT_ID,
+    container: process.env.INFOMANIAK_CONTAINER,
+    username: process.env.INFOMANIAK_USERNAME,
+    password: process.env.INFOMANIAK_PASSWORD,
+    userDomainName: process.env.INFOMANIAK_USER_DOMAIN_NAME,
+    projectName: process.env.INFOMANIAK_PROJECT_NAME,
+  },
   microsoft: {
     clientId: process.env.CLIENT_ID,
     clientSecret: process.env.CLIENT_SECRET,
