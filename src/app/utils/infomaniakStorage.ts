@@ -26,7 +26,7 @@ console.log("AUTH DEBUG:", {
 let cachedToken: string | null = null
 let tokenExpiry: Date | null = null
 
-const getToken = async (): Promise<string> => {
+export const getToken = async (): Promise<string> => {
   if (cachedToken && tokenExpiry && new Date() < tokenExpiry) {
     return cachedToken
   }
