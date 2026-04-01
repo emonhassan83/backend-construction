@@ -2,6 +2,7 @@
 import httpStatus from 'http-status';
 import AppError from '../../errors/AppError';
 import { uploadToInfomaniak, uploadManyToInfomaniak } from '../../utils/infomaniakStorage';
+import config from '../../config';
 
 const single = async (file: any) => {
   if (!file) {
@@ -56,7 +57,7 @@ const multiple = async (files: any) => {
 
     return {
       ...file,
-      url: `/files-proxy?url=${encodeURIComponent(originalUrl)}`,
+      url: `${config.server_url}/files-proxy?url=${encodeURIComponent(originalUrl)}`,
     }
   })
 

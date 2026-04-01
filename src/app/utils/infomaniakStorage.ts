@@ -86,25 +86,26 @@ const getToken = async (): Promise<string> => {
 
 export const uploadToInfomaniak = async (
   file: any,
-  folder: string = 'workphoto',
+  folder: string = 'workphoto'
 ): Promise<string> => {
   try {
-    const token = await getToken()
+    const token = await getToken();
 
-    let fileData: Buffer
+    let fileData: Buffer;
     if (file.buffer) {
-      fileData = file.buffer
+      fileData = file.buffer;
     } else if (file.path && fs.existsSync(file.path)) {
-      fileData = fs.readFileSync(file.path)
+      fileData = fs.readFileSync(file.path);
     } else {
-      throw new Error('File data not found')
+      throw new Error('File data not found');
     }
 
-    const fileName = `${Date.now()}_${file.originalname}`
-    const objectPath = `${folder}/${fileName}`
+    const fileName = `${Date.now()}_${file.originalname}`;
+    const objectPath = `${folder}/${fileName}`;
 
-    const uploadUrl = `${INFOMANIAK.storageUrl}/${INFOMANIAK.container}/${objectPath}`
+    const uploadUrl = `${INFOMANIAK.storageUrl}/${INFOMANIAK.container}/${objectPath}`;
 
+    // Upload file
     await axios.put(uploadUrl, fileData, {
       headers: {
         'X-Auth-Token': token,
@@ -112,23 +113,19 @@ export const uploadToInfomaniak = async (
       },
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
-    })
+    });
 
-    console.log(`✅ Uploaded to Infomaniak: ${objectPath}`)
+    console.log(`✅ Uploaded to Infomaniak: ${objectPath}`);
 
-    // Return public URL (Infomaniak S3 style)
-    return `${INFOMANIAK.storageUrl}/${INFOMANIAK.container}/${objectPath}`
+    // 🔥 Public URL তৈরি করুন (Infomaniak S3 Style)
+    const publicUrl = `https://s3.pub1.infomaniak.cloud/${INFOMANIAK.container}/${objectPath}`;
+
+    return publicUrl;   // ← এটাই আপনার চাওয়া Public URL
   } catch (error: any) {
-    console.error(
-      '❌ Infomaniak Upload Failed:',
-      error.response?.data || error.message,
-    )
-    throw new AppError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to upload to Infomaniak Object Storage',
-    )
+    console.error('❌ Infomaniak Upload Failed:', error.response?.data || error.message);
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to upload to Infomaniak Object Storage');
   }
-}
+};
 
 // Multiple files upload
 export const uploadManyToInfomaniak = async (files: any[]) => {
