@@ -5,6 +5,7 @@ import globalErrorHandler from './app/middleware/globalErrorHandler'
 import notFound from './app/middleware/notFound'
 import router from './app/routes'
 import { WorkPhotoControllers } from './app/modules/workPhotos/workPhotos.controller'
+import fileProxyRoute from './app/routes/fileProxy.route'
 
 const app: Application = express()
 
@@ -22,6 +23,7 @@ app.use(
 app.use(cookieParser())
 
 // application routes
+app.use('/', fileProxyRoute)
 app.use('/api/v1', router)
 
 // Start OAuth flow -> GET /api/v1/onedrive/connect/:companyId
