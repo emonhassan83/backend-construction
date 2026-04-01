@@ -1,5 +1,4 @@
 // src/app/routes/fileProxy.route.ts
-
 import express from 'express'
 import axios from 'axios'
 import { getToken } from '../utils/infomaniakStorage'
@@ -10,26 +9,16 @@ router.get('/files-proxy', async (req, res) => {
   try {
     const fileUrl = req.query.url as string
 
-    if (!fileUrl) {
-      res.status(400).json({
-        success: false,
-        message: 'Missing file URL',
-      })
-      return
-    }
-
-    // 🔥 এখানে token লাগবে
     const token = await getToken()
 
     const response = await axios.get(fileUrl, {
       responseType: 'stream',
       headers: {
-        'X-Auth-Token': token, // 🔥 MOST IMPORTANT
+        'X-Auth-Token': token,
       },
     })
 
     res.setHeader('Content-Type', response.headers['content-type'])
-
     response.data.pipe(res)
   } catch (error: any) {
     console.error('Proxy error:', error.response?.data || error.message)
@@ -40,6 +29,5 @@ router.get('/files-proxy', async (req, res) => {
     })
   }
 })
-
 
 export default router
