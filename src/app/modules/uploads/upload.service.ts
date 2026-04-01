@@ -35,19 +35,33 @@ const multiple = async (files: any) => {
     return [];
   }
 
-  // Filter only images & videos
   const allowedFiles = fileArray.filter(
-    (file) => file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')
+    (file) =>
+      file.mimetype.startsWith('image/') ||
+      file.mimetype.startsWith('video/')
   );
 
   if (!allowedFiles.length) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Only image and video files are allowed!');
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Only image and video files are allowed!'
+    );
   }
 
   const uploadedFiles = await uploadManyToInfomaniak(allowedFiles);
 
-  return uploadedFiles;
-};
+  // ✅ এখানে public URL না দিয়ে proxy URL return করবো
+  const result = uploadedFiles.map((file) => {
+    const originalUrl = file.url
+
+    return {
+      ...file,
+      url: `/files-proxy?url=${encodeURIComponent(originalUrl)}`,
+    }
+  })
+
+  return result;
+}
 
 const uploadService = { multiple, single };
 export default uploadService;
