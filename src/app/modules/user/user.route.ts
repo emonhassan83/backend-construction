@@ -27,14 +27,14 @@ router.post(
 
 router.post(
   '/connect-nextcloud',
-  auth(USER_ROLE.project_manager),
+  auth(USER_ROLE.admin, USER_ROLE.project_manager),
   zodValidationRequest(UserValidation.nextcloudConnectSchema),
   UserControllers.connectNextcloud,
 );
 
 router.post(
   '/disconnect-nextcloud',
-  auth(USER_ROLE.project_manager),
+  auth(USER_ROLE.admin, USER_ROLE.project_manager),
   UserControllers.disconnectNextcloud,
 );
 
@@ -82,7 +82,7 @@ router.get(
 
 router.get(
   '/nextcloud-status',
-  auth(USER_ROLE.project_manager),
+  auth(USER_ROLE.admin, USER_ROLE.project_manager),
   UserControllers.getNextcloudStatus,
 );
 
