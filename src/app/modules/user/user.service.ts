@@ -10,7 +10,6 @@ import {
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
-import { generateCryptoString } from '../../utils/generateCryptoString'
 import {
   generateDummyEmail,
   generateUniqueUsername,
@@ -19,7 +18,7 @@ import { WorkPhoto } from '../workPhotos/workPhotos.model'
 import axios from 'axios'
 import { encrypt } from '../../utils/encryption'
 
-const addACompanyIntoDB = async (payload: any) => {
+const addACompanyIntoDB = async (payload: Partial<TUser>) => {
   if (payload.role === USER_ROLE.admin) {
     throw new AppError(
       httpStatus.FORBIDDEN,
@@ -30,7 +29,7 @@ const addACompanyIntoDB = async (payload: any) => {
   // Auto-generate username if not provided
   if (!payload.username) {
     payload.username = await generateUniqueUsername(
-      payload.name || payload.email,
+      payload.name! || payload.email!,
     )
   }
 
@@ -81,7 +80,7 @@ const addACompanyIntoDB = async (payload: any) => {
 
   // New user — set role to 'company' if not already set
   userPayload.role = USER_ROLE.project_manager
-  userPayload.password = generateCryptoString(12)
+  userPayload.password = payload.password
 
   if (!userPayload.password) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
@@ -103,7 +102,7 @@ const addACompanyIntoDB = async (payload: any) => {
   )
 
   // Send invitation email
-  await addCompanyInvitationMail(userPayload.email, userPayload.password)
+  await addCompanyInvitationMail(userPayload.name!, userPayload.email!, userPayload.password)
 
   return newCompany
 }
@@ -413,7 +412,6 @@ export const UserService = {
   changeUserStatusFromDB,
   updateUserInfoFromDB,
   deleteAUserFromDB,
-
   connectNextcloud,
   disconnectNextcloud,
   getNextcloudStatus,

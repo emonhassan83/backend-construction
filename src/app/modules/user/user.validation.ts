@@ -13,6 +13,9 @@ const createCompanyValidationSchema = z.object({
     contactNumber: z.string({
       required_error: 'Contact number is required!',
     }),
+    password: z.string({
+      required_error: 'Password is required!',
+    }),
   }),
 })
 
