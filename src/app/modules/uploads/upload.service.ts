@@ -1,27 +1,12 @@
-// src/services/uploadService.ts
 import httpStatus from 'http-status';
+import { uploadManyToS3, uploadToS3 } from '../../utils/s3';
 import AppError from '../../errors/AppError';
-import { uploadToInfomaniak, uploadManyToInfomaniak } from '../../utils/infomaniakStorage';
-import config from '../../config';
-
-const single = async (file: any) => {
-  if (!file) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'File is required');
-  }
-
-  const result = await uploadToInfomaniak(file, 'workphoto');
-
-  const fileSizeInMB = Number((file.size / (1024 * 1024)).toFixed(4));
-
-  return {
-    url: result,
-    size: fileSizeInMB,
-  };
-};
+import path from 'path';
 
 const multiple = async (files: any) => {
   let fileArray: any[] = [];
 
+  // Normalize multer upload structures
   if (Array.isArray(files)) {
     fileArray = files;
   } else if (files?.files && Array.isArray(files.files)) {
@@ -36,33 +21,203 @@ const multiple = async (files: any) => {
     return [];
   }
 
-  const allowedFiles = fileArray.filter(
-    (file) =>
-      file.mimetype.startsWith('image/') ||
-      file.mimetype.startsWith('video/')
-  );
+  // Helper: Get extension (without dot)
+  const getExtension = (file: any): string => {
+    if (!file.originalname) return '';
+    const parts = file.originalname.split('.');
+    return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
+  };
 
-  if (!allowedFiles.length) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'Only image and video files are allowed!'
-    );
-  }
+  // Helper: Sanitize filename (remove dangerous chars)
+  const sanitizeFileName = (name: string): string => {
+    if (!name) return 'file';
+    return name
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .trim() || 'file';
+  };
 
-  const uploadedFiles = await uploadManyToInfomaniak(allowedFiles);
+  // Generate safe, unique S3 key with original name preserved
+  const generateS3Key = (file: any): string => {
+    const ext = getExtension(file);
+    let baseName = 'file';
 
-  // ✅ এখানে public URL না দিয়ে proxy URL return করবো
-  const result = uploadedFiles.map((file) => {
-    const originalUrl = file.url
+    if (file.originalname) {
+      baseName = sanitizeFileName(
+        file.originalname.replace(new RegExp(`\\.${ext}$`, 'i'), '')
+      );
+    }
+
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+
+    return `${baseName}-${timestamp}-${random}${ext ? `.${ext}` : ''}`;
+  };
+
+  const determineCategoryAndType = (file: any) => {
+    const mimetype = file.mimetype?.toLowerCase() || '';
+    const ext = getExtension(file);
+
+    let path = 'others';
+    let type = 'unknown';
+
+    // Images
+    if (mimetype.startsWith('image/')) {
+      path = 'images';
+      type = 'image';
+    }
+    // Videos
+    else if (mimetype.startsWith('video/')) {
+      path = 'videos';
+      type = 'video';
+    }
+    // Audios
+    else if (mimetype.startsWith('audio/')) {
+      path = 'audios';
+      type = 'audio';
+    }
+    // PDFs
+    else if (mimetype === 'application/pdf' || ext === 'pdf') {
+      path = 'documents';
+      type = 'document_pdf';
+    }
+    // Office documents
+    else if (
+      mimetype.startsWith('application/vnd.') ||
+      ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(ext)
+    ) {
+      path = 'documents';
+      type = 'document_office';
+    }
+    // Plain text / CSV / Markdown
+    else if (
+      mimetype === 'text/plain' ||
+      mimetype === 'text/csv' ||
+      ['txt', 'csv', 'md', 'log', 'json', 'xml', 'yaml', 'yml'].includes(ext)
+    ) {
+      path = 'documents';
+      type = 'document_text';
+    }
+    // Archives
+    else if (
+      [
+        'application/zip',
+        'application/x-zip-compressed',
+        'application/x-rar-compressed',
+        'application/x-7z-compressed',
+        'application/x-tar',
+        'application/gzip',
+      ].includes(mimetype) ||
+      ['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext)
+    ) {
+      path = 'archives';
+      type = 'archive';
+    }
+    // Fonts
+    else if (
+      mimetype.startsWith('font/') ||
+      mimetype === 'application/font-woff' ||
+      ['ttf', 'otf', 'woff', 'woff2', 'eot'].includes(ext)
+    ) {
+      path = 'fonts';
+      type = 'font';
+    }
+    // Code / Scripts
+    else if (
+      ['js', 'ts', 'py', 'java', 'cpp', 'c', 'cs', 'go', 'php', 'rb', 'swift', 'kt', 'rs', 'sh', 'bash', 'html', 'css', 'scss'].includes(ext) ||
+      mimetype === 'application/javascript' ||
+      mimetype === 'text/x-python' ||
+      mimetype.startsWith('text/x-')
+    ) {
+      path = 'code';
+      type = 'code_source';
+    }
+    // 3D Models / CAD
+    else if (
+      ['stl', 'obj', 'fbx', 'glb', 'gltf', 'blend', '3ds', 'dae'].includes(ext) ||
+      mimetype === 'model/gltf-binary' ||
+      mimetype === 'application/octet-stream'
+    ) {
+      path = 'models';
+      type = 'model_3d';
+    }
+    // Executable / Binary
+    else if (
+      ['exe', 'msi', 'dmg', 'apk', 'deb', 'rpm', 'bin', 'app'].includes(ext) ||
+      mimetype === 'application/x-msdownload' ||
+      mimetype === 'application/octet-stream'
+    ) {
+      path = 'binaries';
+      type = 'executable';
+    }
+    // Subtitle files
+    else if (['srt', 'vtt', 'ass', 'ssa'].includes(ext)) {
+      path = 'subtitles';
+      type = 'subtitle';
+    }
+
+    return { path, type };
+  };
+
+  // Prepare upload tasks
+  const uploadTasks = fileArray.map((file: any) => {
+    const { path } = determineCategoryAndType(file);
+    const key = generateS3Key(file);   // safe unique key
+
+    return { file, path, key };
+  });
+
+  // Upload to S3 (Infomaniak)
+  const uploadedFiles = await uploadManyToS3(uploadTasks);
+
+  // Build final response
+  const result = uploadedFiles.map((item: any, index: number) => {
+    const originalFile = fileArray[index];
+    const sizeInMB = Number((originalFile.size / (1024 * 1024)).toFixed(4));
+    const extension = getExtension(originalFile);
+    const { type: file_type } = determineCategoryAndType(originalFile);
 
     return {
-      ...file,
-      url: `${config.server_url}/files-proxy?url=${encodeURIComponent(originalUrl)}`,
-    }
-  })
+      url: item.url,
+      key: item.key,                    // full S3 key (delete করার জন্য খুব জরুরি)
+      size: sizeInMB,
+      extension: extension ? `.${extension}` : null,
+      type: file_type,
+      mimetype: originalFile.mimetype,
+      originalName: originalFile.originalname,
+    };
+  });
 
   return result;
-}
+};
+
+const single = async (file: any) => {
+  if (!file) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'File is required');
+  }
+
+  // Generate proper key for single upload
+  const ext = file.originalname ? path.extname(file.originalname) : '';
+  const fileName = `images/${Date.now()}-${Math.floor(Math.random() * 900000)}${ext}`;
+
+  const result = await uploadToS3({
+    file,
+    fileName,                    // full key with folder
+  });
+
+  const fileSizeInMB = Number((file.size / (1024 * 1024)).toFixed(4));
+
+  return {
+    url: result,
+    key: fileName,               // full key
+    size: fileSizeInMB,
+    extension: ext || null,
+    type: 'image',
+    mimetype: file.mimetype,
+    originalName: file.originalname,
+  };
+};
 
 const uploadService = { multiple, single };
 export default uploadService;

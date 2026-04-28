@@ -37,15 +37,15 @@ export default {
   },
   payment_success_url: process.env.PAYMENT_SUCCESS_URL,
   payment_cancel_url: process.env.PAYMENT_CANCEL_URL,
-  aws: {
-    accessKeyId: process.env.S3_BUCKET_ACCESS_KEY,
-    secretAccessKey: process.env.S3_BUCKET_SECRET_ACCESS_KEY,
-    s3BaseUrl: process.env.S3_BASE_URL,
-    s3_api: process.env.S3_API,
-    region: process.env.AWS_REGION,
-    bucket: process.env.AWS_BUCKET_NAME,
-    endpoint: process.env.SPACES_API,
-  },
+aws: {
+  accessKeyId: process.env.S3_ACCESS_KEY!,
+  secretAccessKey: process.env.S3_SECRET_KEY!,
+  endpoint: process.env.S3_ENDPOINT!,
+  region: process.env.S3_REGION || 'us-east-1',
+  bucket: process.env.S3_BUCKET_NAME!,
+  forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+  s3BaseUrl: process.env.S3_BASE_URL!,        // public URL base
+},
   infomaniak: {
     authUrl: process.env.INFOMANIAK_AUTH_URL,
     storageUrl: process.env.INFOMANIAK_STORAGE_URL,
