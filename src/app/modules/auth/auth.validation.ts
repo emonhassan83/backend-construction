@@ -7,8 +7,7 @@ const loginValidationSchema = z.object({
       .string({
         invalid_type_error: 'Password must be a string',
       })
-      .min(6, { message: 'Password must be at least 6 characters' })
-      .max(20, { message: 'Password cannot be more than 20 characters' }),
+      .min(6, { message: 'Password must be at least 6 characters' }),
       fcmToken: z.string().optional(),
   }),
 })
