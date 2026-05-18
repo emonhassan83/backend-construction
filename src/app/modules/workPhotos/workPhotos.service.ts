@@ -19,29 +19,72 @@ import {
   getNextcloudCredentials,
   uploadToNextcloud,
 } from '../../utils/nextcloud'
+import mongoose from 'mongoose'
 
 export const scheduleOldWorkImageCleanup = () => {
-  // Runs every day at 2 AM
   cron.schedule('0 2 * * *', async () => {
-    try {
-      const thresholdDate = subDays(new Date(), 30)
+    console.log('[CRON] 🕐 Starting old work photo cleanup...');
 
-      const result = await WorkPhoto.deleteMany({
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const thresholdDate = subDays(new Date(), 30);
+
+      // Find photos to delete first (need project IDs for count update)
+      const oldPhotos = await WorkPhoto.find({
         createdAt: { $lt: thresholdDate },
       })
+        .select('project')
+        .session(session)
+        .lean();
 
-      if (result.deletedCount && result.deletedCount > 0) {
-        console.log(
-          `[CRON] ✅ Deleted ${result.deletedCount} work photos older than 30 days.`,
-        )
-      } else {
-        console.log('[CRON] 📭 No old work photos to delete.')
+      if (!oldPhotos.length) {
+        console.log('[CRON] 📭 No old work photos to delete.');
+        await session.abortTransaction();
+        return;
       }
+
+      // Group by project — count how many photos per project to delete
+      const projectCountMap = new Map<string, number>();
+      for (const photo of oldPhotos) {
+        if (!photo.project) continue;
+        const key = photo.project.toString();
+        projectCountMap.set(key, (projectCountMap.get(key) ?? 0) + 1);
+      }
+
+      // Delete all old photos
+      const deleteResult = await WorkPhoto.deleteMany({
+        createdAt: { $lt: thresholdDate },
+      }).session(session);
+
+      // Decrement photosCount for each affected project in parallel
+      await Promise.all(
+        Array.from(projectCountMap.entries()).map(([projectId, count]) =>
+          Project.findByIdAndUpdate(
+            projectId,
+            { $inc: { photosCount: -count } },
+            { session },
+          ),
+        ),
+      );
+
+      await session.commitTransaction();
+
+      console.log(
+        `[CRON] ✅ Deleted ${deleteResult.deletedCount} work photos older than 30 days.`,
+      );
+      console.log(
+        `[CRON] 📊 Updated photosCount for ${projectCountMap.size} projects.`,
+      );
     } catch (error) {
-      console.error('[CRON] ❌ Work photo cleanup failed:', error)
+      await session.abortTransaction();
+      console.error('[CRON] ❌ Work photo cleanup failed, transaction rolled back:', error);
+    } finally {
+      session.endSession();
     }
-  })
-}
+  });
+};
 
 // OneDrive Connect (OAuth Redirect)
 const connectOneDrive = async (companyId: string) => {
@@ -547,25 +590,36 @@ const updateWorkPhotoFromDB = async (
 }
 
 const deleteAWorkPhotoFromDB = async (id: string) => {
-  const workPhoto = await WorkPhoto.findById(id)
-  if (!workPhoto || workPhoto?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record not found')
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const workPhoto = await WorkPhoto.findById(id).session(session);
+    if (!workPhoto || workPhoto.isDeleted)
+      throw new AppError(httpStatus.NOT_FOUND, 'Work photo not found');
+
+    const deleted = await WorkPhoto.findByIdAndDelete(id).session(session);
+    if (!deleted)
+      throw new AppError(httpStatus.NOT_FOUND, 'Work photo delete failed');
+
+    // Decrement photosCount only if photo belongs to a project
+    if (workPhoto.project) {
+      await Project.findByIdAndUpdate(
+        workPhoto.project,
+        { $inc: { photosCount: -1 } },
+        { new: true, session },
+      );
+    }
+
+    await session.commitTransaction();
+    return deleted;
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
   }
-
-  const result = await WorkPhoto.findByIdAndDelete(id)
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Work Photo record Delete failed')
-  }
-
-  // 🔥 DECREMENT project photo count (-1)
-  await Project.findByIdAndUpdate(
-    workPhoto.project,
-    { $inc: { photosCount: -1 } },
-    { new: true },
-  )
-
-  return result
-}
+};
 
 export const WorkPhotoService = {
   connectOneDrive,

@@ -5,6 +5,7 @@ import { TProject } from './project.interface'
 import { Project } from './project.model'
 import { User } from '../user/user.model'
 import { WorkPhoto } from '../workPhotos/workPhotos.model'
+import mongoose from 'mongoose'
 
 const createProjectIntoDB = async (payload: TProject, userId: string) => {
   // Validate user
@@ -26,24 +27,119 @@ const createProjectIntoDB = async (payload: TProject, userId: string) => {
 }
 
 const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
-  const projectQuery = new QueryBuilder(
-    Project.find({ isDeleted: false }),
-    query,
-  )
-    .search(['name'])
-    .filter()
-    .sort()
-    .paginate()
-    .fields()
+  const author = query.author;
+  const page = Number(query.page) || 1;
+  const limit = Number(query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const searchTerm = query.searchTerm as string | undefined;
 
-  const result = await projectQuery.modelQuery
-  const meta = await projectQuery.countTotal()
+  // ── Base match ─────────────────────────────────────────────────────────────
+  const matchStage: Record<string, any> = { isDeleted: false };
+  if (author) matchStage.author = new mongoose.Types.ObjectId(String(author));
+  if (searchTerm) matchStage.name = { $regex: searchTerm, $options: 'i' };
+
+  const [projects, countResult] = await Promise.all([
+    Project.aggregate([
+      { $match: matchStage },
+
+      // ── Join latest WorkPhoto upload per project ───────────────────────────
+      {
+        $lookup: {
+          from: 'workphotos',
+          let: { projectId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$project', '$$projectId'] } } },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+            { $project: { createdAt: 1 } },
+          ],
+          as: 'lastPhoto',
+        },
+      },
+
+      // ── Count actual photos ────────────────────────────────────────────────
+      {
+        $lookup: {
+          from: 'workphotos',
+          localField: '_id',
+          foreignField: 'project',
+          as: 'allPhotos',
+        },
+      },
+
+      {
+        $addFields: {
+          photosCount: { $size: '$allPhotos' },
+          lastPhotoAt: {
+            $ifNull: [
+              { $arrayElemAt: ['$lastPhoto.createdAt', 0] },
+              null,
+            ],
+          },
+          // ── Sort key: photos uploaded → use lastPhotoAt, else createdAt ───
+          sortKey: {
+            $ifNull: [
+              { $arrayElemAt: ['$lastPhoto.createdAt', 0] },
+              '$createdAt',
+            ],
+          },
+        },
+      },
+
+      // ── Clean up lookup arrays ─────────────────────────────────────────────
+      { $unset: ['lastPhoto', 'allPhotos'] },
+
+      // ── Sort: most recently active project first ───────────────────────────
+      { $sort: { sortKey: -1 } },
+
+      { $skip: skip },
+      { $limit: limit },
+    ]),
+
+    Project.aggregate([
+      { $match: matchStage },
+      { $count: 'total' },
+    ]),
+  ]);
+
+  const total = countResult[0]?.total ?? 0;
+
+  // ── Fire-and-forget: fix stale photosCount in DB ───────────────────────────
+  const stale = projects.filter(
+    (p) => p.photosCount !== p.photosCount, // compare with DB value if needed
+  );
+
+  // Better stale check — compare aggregate count vs stored count
+  Project.find({ _id: { $in: projects.map((p) => p._id) } })
+    .select('photosCount')
+    .lean()
+    .then((dbProjects) => {
+      const dbMap = new Map(dbProjects.map((p) => [p._id.toString(), p.photosCount]));
+      const toFix = projects.filter(
+        (p) => dbMap.get(p._id.toString()) !== p.photosCount,
+      );
+      if (toFix.length > 0) {
+        Promise.all(
+          toFix.map((p) =>
+            Project.findByIdAndUpdate(p._id, { $set: { photosCount: p.photosCount } }),
+          ),
+        ).catch((err) =>
+          console.error('[Projects] ⚠️ Failed to sync stale photosCount:', err),
+        );
+      }
+    })
+    .catch(() => {});
 
   return {
-    meta,
-    result,
-  }
-}
+    meta: {
+      page,
+      limit,
+      total,
+      totalPage: Math.ceil(total / limit),
+    },
+    result: projects,
+  };
+};
 
 const getAProjectsFromDB = async (id: string) => {
   const project = await Project.findById(id).populate([
