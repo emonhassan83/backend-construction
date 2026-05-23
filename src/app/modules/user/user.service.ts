@@ -102,7 +102,11 @@ const addACompanyIntoDB = async (payload: Partial<TUser>) => {
   )
 
   // Send invitation email
-  await addCompanyInvitationMail(userPayload.name!, userPayload.email!, userPayload.password)
+  await addCompanyInvitationMail(
+    userPayload.name!,
+    userPayload.email!,
+    userPayload.password,
+  )
 
   return newCompany
 }
@@ -315,16 +319,21 @@ const deleteAUserFromDB = async (userId: string) => {
 
 // Company admin Nextcloud/kDrive connect করবে
 const connectNextcloud = async (companyId: string, payload: any) => {
-  const { nextcloudUrl, username, password } = payload;
+  const { username, password } = payload
+
+  const nextcloudUrl = 'https://cloud.baulinse.ch'
 
   // 1. Validate company exists
-  const company = await User.findById(companyId);
+  const company = await User.findById(companyId)
   if (!company || company.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
   }
 
   if (company.role !== 'project_manager') {
-    throw new AppError(httpStatus.FORBIDDEN, 'Only company admins can connect Nextcloud!');
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Only company admins can connect Nextcloud!',
+    )
   }
 
   // 2. Test Nextcloud connection
@@ -333,14 +342,17 @@ const connectNextcloud = async (companyId: string, payload: any) => {
       method: 'PROPFIND',
       url: `${nextcloudUrl}/remote.php/dav/files/${username}/`,
       auth: { username, password },
-      headers: { 'Depth': '0' },
-    });
+      headers: { Depth: '0' },
+    })
   } catch (err: any) {
-    console.error('Nextcloud connection test failed:', err.response?.data || err.message);
+    console.error(
+      'Nextcloud connection test failed:',
+      err.response?.data || err.message,
+    )
     throw new AppError(
       httpStatus.BAD_REQUEST,
       'Nextcloud connection failed! Check URL, username, and password.',
-    );
+    )
   }
 
   // 3. Save credentials (encrypted password)
@@ -354,25 +366,28 @@ const connectNextcloud = async (companyId: string, payload: any) => {
       nextcloudConnectedAt: new Date(),
     },
     { new: true },
-  );
+  )
 
   return {
     message: 'Nextcloud connected successfully!',
     nextcloudUrl: updatedCompany?.nextcloudUrl,
     nextcloudUsername: updatedCompany?.nextcloudUsername,
     nextcloudConnected: updatedCompany?.nextcloudConnected,
-  };
-};
+  }
+}
 
 // Company admin Nextcloud disconnect করবে
 const disconnectNextcloud = async (companyId: string) => {
-  const company = await User.findById(companyId);
+  const company = await User.findById(companyId)
   if (!company || company.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
   }
 
   if (company.role !== 'project_manager') {
-    throw new AppError(httpStatus.FORBIDDEN, 'Only company admins can disconnect Nextcloud!');
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Only company admins can disconnect Nextcloud!',
+    )
   }
 
   await User.findByIdAndUpdate(companyId, {
@@ -381,19 +396,19 @@ const disconnectNextcloud = async (companyId: string) => {
     nextcloudPassword: null,
     nextcloudConnected: false,
     nextcloudConnectedAt: null,
-  });
+  })
 
-  return { message: 'Nextcloud disconnected successfully!' };
-};
+  return { message: 'Nextcloud disconnected successfully!' }
+}
 
 // Company Nextcloud status check
 const getNextcloudStatus = async (companyId: string) => {
   const company = await User.findById(companyId).select(
     'nextcloudUrl nextcloudUsername nextcloudConnected nextcloudConnectedAt',
-  );
+  )
 
   if (!company || company.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!')
   }
 
   return {
@@ -401,8 +416,8 @@ const getNextcloudStatus = async (companyId: string) => {
     url: company.nextcloudUrl || null,
     username: company.nextcloudUsername || null,
     connectedAt: company.nextcloudConnectedAt || null,
-  };
-};
+  }
+}
 
 export const UserService = {
   addACompanyIntoDB,

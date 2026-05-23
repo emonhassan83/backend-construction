@@ -75,43 +75,36 @@ export const addCompanyInvitationMail = async (
     `Welcome to BauLinse - Account Created`,
     `
       <div style="font-family: Arial, Helvetica, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f8f8f8;">
-        
-        <!-- Header -->
-        <div style="text-align: center; padding: 35px 20px; background-color: #333333; color: #ffffff; border-radius: 8px;">
-          <h1 style="margin: 0; font-size: 28px; font-weight: 600;">BauLinse</h1>
-          <p style="margin: 10px 0 0; font-size: 17px; opacity: 0.9;">Construction Management System</p>
-        </div>
-
         <!-- Main Content -->
         <div style="background: #ffffff; padding: 35px; border-radius: 8px; margin-top: 20px; border: 1px solid #e0e0e0;">
           
-          <h2 style="color: #222222; margin-bottom: 25px; font-weight: 600;">Your Company Account has been successfully created</h2>
+          <h2 style="color: #222222; margin-bottom: 20px; font-weight: 600;">Your Company Account has been successfully created</h2>
           
-          <p style="color: #444444; font-size: 16px; line-height: 1.7;">
+          <p style="color: #444444; font-size: 14px; line-height: 1;">
             Dear <strong>${username}</strong>,<br><br>
             You have been added as the administrator in the BauLinse Construction Management System.
           </p>
 
           <!-- Credentials Box -->
           <div style="background: #f5f5f5; border: 1px solid #d0d0d0; border-radius: 8px; padding: 25px; margin: 30px 0;">
-            <h3 style="margin-top: 0; color: #222222; font-weight: 600;">Login Credentials</h3>
+            <h4 style="margin-top: 0; color: #222222; font-weight: 600;">Login Credentials</h4>
             
             <table style="width: 100%; border-collapse: collapse; font-size: 15px; color: #333333;">
               <tr>
-                <td style="padding: 12px 0; font-weight: 600; width: 160px; color: #444444;">Dashboard URL:</td>
-                <td style="padding: 12px 0;">
+                <td style="padding: 8px 0; font-weight: 600; width: 160px; color: #444444;">Dashboard URL:</td>
+                <td style="padding: 8px 0;">
                   <a href="${dashboardUrl}" target="_blank" style="color: #0066cc; text-decoration: none;">
                     ${dashboardUrl}
                   </a>
                 </td>
               </tr>
               <tr>
-                <td style="padding: 12px 0; font-weight: 600; color: #444444;">Email / Username:</td>
-                <td style="padding: 12px 0; color: #222222;">${email}</td>
+                <td style="padding: 8px 0; font-weight: 600; color: #444444;">Email / Username:</td>
+                <td style="padding: 8px 0; color: #222222;">${email}</td>
               </tr>
               <tr>
-                <td style="padding: 12px 0; font-weight: 600; color: #444444;">Temporary Password:</td>
-                <td style="padding: 12px 0; font-family: monospace; color: #222222; font-weight: bold;">
+                <td style="padding: 8px 0; font-weight: 600; color: #444444;">Temporary Password:</td>
+                <td style="padding: 8px 0; font-family: monospace; color: #222222;">
                   ${password}
                 </td>
               </tr>
