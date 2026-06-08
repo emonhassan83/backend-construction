@@ -5,7 +5,7 @@ import { WorkPhotoService } from './workPhotos.service'
 import config from '../../config'
 
 const connectOneDrive = catchAsync(async (req, res) => {
-  const result = await WorkPhotoService.connectOneDrive(req.params.companyId)
+  const result = await WorkPhotoService.connectOneDrive(req.params.companyId as string)
 
   // res.redirect(result);
   sendResponse(res, {
@@ -123,7 +123,7 @@ const groupWorkPhotosByDate  = catchAsync(async (req, res) => {
 })
 
 const getAWorkPhoto = catchAsync(async (req, res) => {
-  const result = await WorkPhotoService.getAWorkPhotosFromDB(req.params.id)
+  const result = await WorkPhotoService.getAWorkPhotosFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,
@@ -135,7 +135,7 @@ const getAWorkPhoto = catchAsync(async (req, res) => {
 
 const updateWorkPhoto = catchAsync(async (req, res) => {
   const result = await WorkPhotoService.updateWorkPhotoFromDB(
-    req.params.id,
+    req.params.id as string,
     req.body,
     req.file
   )
@@ -149,7 +149,7 @@ const updateWorkPhoto = catchAsync(async (req, res) => {
 })
 
 const deleteAWorkPhoto = catchAsync(async (req, res) => {
-  const result = await WorkPhotoService.deleteAWorkPhotoFromDB(req.params.id)
+  const result = await WorkPhotoService.deleteAWorkPhotoFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,

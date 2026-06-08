@@ -2,11 +2,11 @@ import { z } from 'zod'
 
 export const createValidationSchema = z.object({
   body: z.object({
-    project: z.string({ required_error: 'Project ID required!' }).optional(),
-    latitude: z.number({ required_error: 'Latitude is required!' }),
-    longitude: z.number({ required_error: 'Longitude is required!' }),
-    location: z.string({ required_error: 'Location name is required!' }),
-    captureAt: z.string({ required_error: 'Capture time is required!' }),
+    project: z.string({ message: 'Project ID required!' }).optional(),
+    latitude: z.number({ message: 'Latitude is required!' }),
+    longitude: z.number({ message: 'Longitude is required!' }),
+    location: z.string({ message: 'Location name is required!' }),
+    captureAt: z.string({ message: 'Capture time is required!' }),
   }),
 })
 

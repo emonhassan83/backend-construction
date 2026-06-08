@@ -124,14 +124,13 @@ const userSchema = new Schema<TUser, UserModel>(
 userSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 })
 
 //* Hash password before saving
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(
       this.password,
       Number(config.bcrypt_salt_rounds),
     )
   }
-  next()
 })
 
 //* Static method to check if user exists by contactNumber

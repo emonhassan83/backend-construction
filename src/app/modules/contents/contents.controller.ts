@@ -29,7 +29,7 @@ const getAllContents = catchAsync(async (req: Request, res: Response) => {
 
 // Get contents by ID
 const getContentsById = catchAsync(async (req: Request, res: Response) => {
-  const result = await contentsService.getContentsById(req.params.id)
+  const result = await contentsService.getContentsById(req.params.id as string)
 
   sendResponse(res, {
     statusCode: 200,
@@ -53,7 +53,7 @@ const updateContents = catchAsync(async (req: Request, res: Response) => {
 
 // Delete contents
 const deleteContents = catchAsync(async (req: Request, res: Response) => {
-  const result = await contentsService.deleteContents(req.params.id)
+  const result = await contentsService.deleteContents(req.params.id as string)
 
   sendResponse(res, {
     statusCode: 200,

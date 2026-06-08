@@ -5,6 +5,7 @@ import { TNotification } from './notification.interface'
 import { Notification } from './notification.model'
 import moment from 'moment'
 import { User } from '../user/user.model'
+import { USER_ROLE } from '../user/user.constant'
 
 const createNotificationIntoDB = async (payload: TNotification) => {
   const notification = await Notification.create(payload)
@@ -25,7 +26,7 @@ const createNotificationIntoDB = async (payload: TNotification) => {
 const sendGeneralNotificationIntoDB = async (payload: TNotification) => {
   const { message, description, ...othersData } = payload
 
-  const userIds = (await User.distinct('_id', { role: 'user' })).map((id) =>
+  const userIds = (await User.distinct('_id', { role: USER_ROLE.worker })).map((id) =>
     id.toString(),
   )
   const notifications = userIds.map((userId) => ({
@@ -86,7 +87,6 @@ const markAsDoneFromDB = async (id: string) => {
         read: true,
       },
     },
-    { new: true },
   )
   return result
 }

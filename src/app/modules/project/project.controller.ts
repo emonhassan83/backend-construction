@@ -44,7 +44,7 @@ const getMyProjects = catchAsync(async (req, res) => {
 })
 
 const getAProject = catchAsync(async (req, res) => {
-  const result = await ProjectService.getAProjectsFromDB(req.params.id)
+  const result = await ProjectService.getAProjectsFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,
@@ -56,7 +56,7 @@ const getAProject = catchAsync(async (req, res) => {
 
 const updateProject = catchAsync(async (req, res) => {
   const result = await ProjectService.updateProjectFromDB(
-    req.params.id,
+    req.params.id as string,
     req.body,
   )
 
@@ -69,7 +69,7 @@ const updateProject = catchAsync(async (req, res) => {
 })
 
 const deleteAProject = catchAsync(async (req, res) => {
-  const result = await ProjectService.deleteAProjectFromDB(req.params.id)
+  const result = await ProjectService.deleteAProjectFromDB(req.params.id as string)
 
   sendResponse(res, {
     success: true,
