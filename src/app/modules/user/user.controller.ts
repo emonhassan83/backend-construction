@@ -43,9 +43,12 @@ const getAllUsers = catchAsync(async (req, res) => {
 })
 
 const getUsersByCompany = catchAsync(async (req, res) => {
-  req.query['company'] = req.user._id
-  req.query['role'] = USER_ROLE.worker
-  const result = await UserService.getAllUsersFromDB(req.query)
+  const query = {
+    ...req.query,
+    company: req.user._id,
+    role: USER_ROLE.worker
+  }
+  const result = await UserService.getAllUsersFromDB(query)
 
   sendResponse(res, {
     success: true,

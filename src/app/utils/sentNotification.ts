@@ -1,9 +1,11 @@
-import admin from 'firebase-admin';
+import { initializeApp, cert, ServiceAccount } from 'firebase-admin/app'
+import { getMessaging } from 'firebase-admin/messaging'
 import AppError from '../errors/AppError';
 import httpStatus from 'http-status'
 import { TNotification } from '../modules/notification/notification.interface';
 import { Notification } from '../modules/notification/notification.model';
 import config from '../config';
+import { User } from '../modules/user/user.model';
 
 const firebaseConfig = {
   type: "service_account",
@@ -18,9 +20,9 @@ const firebaseConfig = {
   client_x509_cert_url: config.firebase.client_x509_cert_url,
 };
 
-admin.initializeApp({
-  credential: admin.credential.cert(firebaseConfig as admin.ServiceAccount),
-});
+initializeApp({
+  credential: cert(firebaseConfig as ServiceAccount),
+})
  
 export const sendNotification = async (
   fcmToken: string[],
@@ -28,7 +30,23 @@ export const sendNotification = async (
 ): Promise<any> => {
   console.log('payload', payload);
   try {
-    const response = await admin.messaging().sendEachForMulticast({
+    if (!payload?.receiver) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Receiver ID is required')
+    }
+
+    if (!fcmToken || fcmToken.length === 0) {
+      console.log('⚠️ No FCM tokens provided');
+      return null;
+    }
+
+    // ✅ Step 1: Check if user allows notifications
+    const user = await User.findById(payload.receiver).select('isNotify fcmToken')
+    if (!user) {
+      console.log('⚠️ Receiver not found in User collection')
+      return null
+    }
+
+    const response = await getMessaging().sendEachForMulticast({
       tokens: fcmToken,
       notification: {
         title: payload.message,
@@ -49,20 +67,8 @@ export const sendNotification = async (
  
     console.log(response?.responses, "from send notification");
  
-    if (response.successCount) {
-      fcmToken?.map(async (token) => {
-        try {
-          if (token) {
- 
-            await Notification.create(payload);
- 
-          } else {
-            console.log("Token not found");
-          }
-        } catch (error) {
-          console.log(error);
-        }
-      });
+    if (response.successCount > 0) {
+      await Notification.create(payload);
     }
  
     console.log("Response:", response.responses);

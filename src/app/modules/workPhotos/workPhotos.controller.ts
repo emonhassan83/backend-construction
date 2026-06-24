@@ -62,8 +62,11 @@ const createWorkPhoto = catchAsync(async (req, res) => {
 })
 
 const getAllWorkersWorkPhotos = catchAsync(async (req, res) => {
-  req.query['author'] = req.params.workerId
-  const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
+  const query = {
+    ...req.query,
+    author: req.params.workerId
+  }
+  const result = await WorkPhotoService.groupWorkPhotosByDate(query)
 
   sendResponse(res, {
     success: true,
@@ -74,8 +77,11 @@ const getAllWorkersWorkPhotos = catchAsync(async (req, res) => {
 })
 
 const getWorkPhotosByProject = catchAsync(async (req, res) => {
-  req.query['project'] = req.params.projectId
-  const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
+  const query = {
+    ...req.query,
+    project: req.params.projectId
+  }
+  const result = await WorkPhotoService.groupWorkPhotosByDate(query)
 
   sendResponse(res, {
     success: true,
@@ -86,9 +92,12 @@ const getWorkPhotosByProject = catchAsync(async (req, res) => {
 })
 
 const getDefaultPhotosByCompany = catchAsync(async (req, res) => {
-  req.query['company'] = req.params.companyId
-  req.query['project'] = undefined
-  const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
+  const query = {
+    ...req.query,
+    company: req.params.companyId,
+    project: undefined
+  }
+  const result = await WorkPhotoService.groupWorkPhotosByDate(query)
 
   sendResponse(res, {
     success: true,
@@ -99,8 +108,11 @@ const getDefaultPhotosByCompany = catchAsync(async (req, res) => {
 })
 
 const getMyWorkPhotos = catchAsync(async (req, res) => {
-  req.query['author'] = req.user._id
-  const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
+  const query = {
+    ...req.query,
+    author: req.user._id
+  }
+  const result = await WorkPhotoService.groupWorkPhotosByDate(query)
 
   sendResponse(res, {
     success: true,
@@ -111,8 +123,11 @@ const getMyWorkPhotos = catchAsync(async (req, res) => {
 })
 
 const groupWorkPhotosByDate  = catchAsync(async (req, res) => {
-  req.query['author'] = req.params.workerId
-  const result = await WorkPhotoService.groupWorkPhotosByDate(req.query)
+  const query = {
+    ...req.query,
+    author: req.params.workerId
+  }
+  const result = await WorkPhotoService.groupWorkPhotosByDate(query)
 
   sendResponse(res, {
     success: true,
