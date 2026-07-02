@@ -114,6 +114,10 @@ const userSchema = new Schema<TUser, UserModel>(
     nextcloudPassword: { type: String }, // Encrypted
     nextcloudConnected: { type: Boolean, default: false },
     nextcloudConnectedAt: { type: Date },
+
+    // WebDAV Credentials
+    webdavUsername: { type: String },
+    webdavPassword: { type: String },
   },
   {
     timestamps: true,

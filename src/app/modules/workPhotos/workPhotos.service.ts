@@ -4,7 +4,7 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { TWorkPhoto } from './workPhotos.interface'
 import { WorkPhoto } from './workPhotos.model'
 import { User } from '../user/user.model'
-import { uploadToS3 } from '../../utils/s3'
+import { uploadToS3, generatePresignedUrl } from '../../utils/s3'
 import cron from 'node-cron'
 import { format, isToday, isYesterday, subDays } from 'date-fns'
 import axios from 'axios'
@@ -621,6 +621,51 @@ const deleteAWorkPhotoFromDB = async (id: string) => {
   }
 };
 
+const getUploadPresignedUrl = async (
+  companyId: string,
+  projectName: string,
+  fileName: string,
+  contentType: string,
+) => {
+  const safeProjectName = (projectName || 'Others').replace(/[^a-zA-Z0-9-_]/g, '_');
+  const s3Key = `workphotos/${companyId}/${safeProjectName}/${Date.now()}_${fileName}`;
+
+  const uploadUrl = await generatePresignedUrl(s3Key, contentType);
+  return { uploadUrl, fileKey: s3Key };
+};
+
+const savePhotoMetadata = async (
+  userId: string,
+  companyId: string,
+  payload: any,
+) => {
+  const { fileKey, latitude, longitude, location, project, captureAt } = payload;
+
+  const imageUrl = `${config.aws.s3BaseUrl}/${fileKey}`;
+  const locationUrl =
+    latitude && longitude
+      ? `https://www.google.com/maps?q=${latitude},${longitude}`
+      : undefined;
+
+  const workPhoto = await WorkPhoto.create({
+    author: userId,
+    company: companyId,
+    project: project || undefined,
+    image: imageUrl,
+    latitude,
+    longitude,
+    location,
+    locationUrl,
+    captureAt: captureAt || new Date().toISOString(),
+  });
+
+  if (project) {
+    await Project.findByIdAndUpdate(project, { $inc: { photosCount: 1 } });
+  }
+
+  return workPhoto;
+};
+
 export const WorkPhotoService = {
   connectOneDrive,
   oneDriveRefreshToken,
@@ -632,4 +677,6 @@ export const WorkPhotoService = {
   updateWorkPhotoFromDB,
   deleteAWorkPhotoFromDB,
   groupWorkPhotosByDate,
+  getUploadPresignedUrl,
+  savePhotoMetadata,
 }

@@ -3,11 +3,32 @@ import {
   DeleteObjectsCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import httpStatus from 'http-status';
 import config from '../config';
 import { s3Client } from '../constants/aws';
 import AppError from '../errors/AppError';
 import path from 'path';
+
+// ====================== Presigned URL Generator ======================
+export const generatePresignedUrl = async (
+  fileName: string,
+  contentType: string,
+): Promise<string> => {
+  try {
+    const command = new PutObjectCommand({
+      Bucket: config.aws.bucket,
+      Key: fileName,
+      ContentType: contentType,
+    });
+
+    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+    return uploadUrl;
+  } catch (error: any) {
+    console.error('Presigned URL Generation Error:', error);
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to generate upload URL');
+  }
+};
 
 // ====================== Single File Upload ======================
 export const uploadToS3 = async ({

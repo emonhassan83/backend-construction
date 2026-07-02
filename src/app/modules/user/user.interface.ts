@@ -36,6 +36,9 @@ export interface TUser {
   nextcloudPassword?: string; // Encrypted
   nextcloudConnected?: boolean;
   nextcloudConnectedAt?: Date;
+
+  webdavUsername?: string;
+  webdavPassword?: string;
 }
 
 export interface TReqUser {

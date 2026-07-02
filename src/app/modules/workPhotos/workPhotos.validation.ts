@@ -19,7 +19,19 @@ export const updateValidationSchema = z.object({
   }),
 })
 
+export const saveMetadataValidationSchema = z.object({
+  body: z.object({
+    fileKey: z.string({ message: 'File key is required!' }),
+    project: z.string({ message: 'Project ID is required!' }).optional(),
+    latitude: z.number({ message: 'Latitude is required!' }),
+    longitude: z.number({ message: 'Longitude is required!' }),
+    location: z.string({ message: 'Location name is required!' }),
+    captureAt: z.string({ message: 'Capture time is required!' }),
+  }),
+})
+
 export const WorkPhotoValidation = {
   createValidationSchema,
   updateValidationSchema,
+  saveMetadataValidationSchema,
 }

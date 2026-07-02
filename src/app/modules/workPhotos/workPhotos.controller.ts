@@ -3,6 +3,9 @@ import httpStatus from 'http-status'
 import sendResponse from '../../utils/sendResponse'
 import { WorkPhotoService } from './workPhotos.service'
 import config from '../../config'
+import { User } from '../user/user.model'
+import { decrypt } from '../../utils/encryption'
+import AppError from '../../errors/AppError'
 
 const connectOneDrive = catchAsync(async (req, res) => {
   const result = await WorkPhotoService.connectOneDrive(req.params.companyId as string)
@@ -174,6 +177,94 @@ const deleteAWorkPhoto = catchAsync(async (req, res) => {
   })
 })
 
+const getPresignedUrl = catchAsync(async (req, res) => {
+  const { projectName, fileName, contentType } = req.query;
+  const companyId = req.user.company;
+
+  const result = await WorkPhotoService.getUploadPresignedUrl(
+    companyId as string,
+    projectName as string,
+    fileName as string,
+    contentType as string,
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Presigned URL generated successfully!',
+    data: result,
+  });
+});
+
+const saveMetadata = catchAsync(async (req, res) => {
+  const userId = req.user._id;
+  const companyId = req.user.company;
+
+  const result = await WorkPhotoService.savePhotoMetadata(
+    userId as string,
+    companyId as string,
+    req.body,
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Photo metadata saved successfully!',
+    data: result,
+  });
+});
+
+const downloadMountScript = catchAsync(async (req, res) => {
+  const { os } = req.query;
+  const user = await User.findById(req.user._id);
+
+  if (!user || !user.webdavUsername || !user.webdavPassword) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'WebDAV is not configured for your company.',
+    );
+  }
+
+  const username = user.webdavUsername;
+  const password = decrypt(user.webdavPassword);
+
+  if (os === 'windows') {
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="connect-drive.bat"',
+    );
+    res.setHeader('Content-Type', 'application/bat');
+
+    const scriptContent =
+      `@echo off\r\n` +
+      `echo Connecting your company photo drive...\r\n` +
+      `net use Z: "https://webdav-gateway.yourdomain.ch/${username}/" /user:${username} ${password} /persistent:yes\r\n` +
+      `echo Done! Your drive Z: is now ready in Windows Explorer.\r\n` +
+      `pause`;
+    return res.send(scriptContent);
+  } else if (os === 'mac') {
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="mount-drive.scpt"',
+    );
+    res.setHeader('Content-Type', 'text/plain');
+
+    const scriptContent =
+      `-- Automated WebDAV Mount for macOS Finder\r\n` +
+      `try\r\n` +
+      `    tell application "Finder"\r\n` +
+      `        mount volume "https://webdav-gateway.yourdomain.ch/${username}/" as user name "${username}" with password "${password}"\r\n` +
+      `    end tell\r\n` +
+      `    display dialog "Success! Your company photo drive is now connected in Finder." buttons {"OK"} default button "OK" with icon note\r\n` +
+      `on error error_message\r\n` +
+      `    display dialog "Connection failed. Error: " & error_message buttons {"OK"} default button "OK" with icon stop\r\n` +
+      `end try`;
+    return res.send(scriptContent);
+  }
+
+  throw new AppError(httpStatus.BAD_REQUEST, 'Invalid OS parameter');
+});
+
 export const WorkPhotoControllers = {
   connectOneDrive,
   oneDriveRefreshToken,
@@ -188,4 +279,7 @@ export const WorkPhotoControllers = {
   getAWorkPhoto,
   updateWorkPhoto,
   deleteAWorkPhoto,
+  getPresignedUrl,
+  saveMetadata,
+  downloadMountScript,
 }

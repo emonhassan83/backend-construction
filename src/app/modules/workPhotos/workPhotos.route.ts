@@ -29,6 +29,25 @@ router.post(
   WorkPhotoControllers.uploadFileNextcloud,
 )
 
+router.get(
+  '/presigned-url',
+  auth(USER_ROLE.project_manager, USER_ROLE.worker),
+  WorkPhotoControllers.getPresignedUrl,
+)
+
+router.post(
+  '/save-metadata',
+  auth(USER_ROLE.project_manager, USER_ROLE.worker),
+  zodValidationRequest(WorkPhotoValidation.saveMetadataValidationSchema),
+  WorkPhotoControllers.saveMetadata,
+)
+
+router.get(
+  '/download-script',
+  auth(USER_ROLE.project_manager),
+  WorkPhotoControllers.downloadMountScript,
+)
+
 router.post(
   '/',
   auth(USER_ROLE.project_manager, USER_ROLE.worker),
