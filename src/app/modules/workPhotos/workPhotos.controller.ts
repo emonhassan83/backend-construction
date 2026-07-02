@@ -227,6 +227,10 @@ const downloadMountScript = catchAsync(async (req, res) => {
 
   const username = user.webdavUsername;
   const password = decrypt(user.webdavPassword);
+  
+  // Construct WebDAV URL dynamically based on the current VPS host/domain
+  const host = req.get('host');
+  const webdavUrl = `${req.protocol}://${host}/webdav/${username}/`;
 
   if (os === 'windows') {
     res.setHeader(
@@ -238,7 +242,7 @@ const downloadMountScript = catchAsync(async (req, res) => {
     const scriptContent =
       `@echo off\r\n` +
       `echo Connecting your company photo drive...\r\n` +
-      `net use Z: "https://webdav-gateway.yourdomain.ch/${username}/" /user:${username} ${password} /persistent:yes\r\n` +
+      `net use Z: "${webdavUrl}" /user:${username} ${password} /persistent:yes\r\n` +
       `echo Done! Your drive Z: is now ready in Windows Explorer.\r\n` +
       `pause`;
     return res.send(scriptContent);
@@ -253,7 +257,7 @@ const downloadMountScript = catchAsync(async (req, res) => {
       `-- Automated WebDAV Mount for macOS Finder\r\n` +
       `try\r\n` +
       `    tell application "Finder"\r\n` +
-      `        mount volume "https://webdav-gateway.yourdomain.ch/${username}/" as user name "${username}" with password "${password}"\r\n` +
+      `        mount volume "${webdavUrl}" as user name "${username}" with password "${password}"\r\n` +
       `    end tell\r\n` +
       `    display dialog "Success! Your company photo drive is now connected in Finder." buttons {"OK"} default button "OK" with icon note\r\n` +
       `on error error_message\r\n` +

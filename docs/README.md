@@ -1,254 +1,188 @@
-# Serverless WebDAV to Infomaniak S3 Integration (Zero VPS Resource Architecture)
+# Direct S3 Upload & Self-Hosted WebDAV Gateway (Swiss-Made Architecture)
 
-This documentation outlines the step-by-step implementation plan for integrating a native WebDAV network drive for PC clients (Windows/Mac) that connects directly to an Infomaniak S3 bucket, bypassing the main Node.js VPS resources (0% VPS CPU/RAM/Bandwidth load) for file transfers.
+This documentation outlines the architecture and implementation details for integrating a native WebDAV network drive for PC clients (Windows/Mac) connecting directly to an Infomaniak S3 bucket, hosted entirely on your Node.js VPS backend (100% Swiss-Made Policy, No Cloudflare or external proxies).
 
 ---
 
 ## 1. Architectural Overview
 
-Instead of buffering files through the Express.js server, files are uploaded directly to the Infomaniak S3 Bucket from the worker's mobile/web app via **S3 Presigned URLs**. For Project Managers, a **Cloudflare Worker** acts as a serverless WebDAV-to-S3 gateway, allowing Windows Explorer and macOS Finder to mount the bucket natively as a network drive.
+Worker apps upload photos directly to the Infomaniak S3 Bucket using **S3 Presigned URLs** (0% VPS CPU/RAM/Bandwidth load for uploads). Project Managers connect to a **self-hosted WebDAV server** running inside the Express.js app. This server translates WebDAV requests (`PROPFIND`, `GET`, etc.) into S3 API calls on the fly, keeping all data traffic secure and confined within the Swiss Infomaniak ecosystem.
 
 ```
 +------------------+                   1. Get Presigned URL               +----------------------+
 |    Worker App    | ---------------------------------------------------> |  Node.js VPS Server  |
-| (Mobile/Web App) | <--------------------------------------------------- |                      |
+| (Mobile/Web App) | <--------------------------------------------------- |   (Express Backend)  |
 +------------------+             2. Return Upload URL & Key               +----------------------+
-         |                                                                           ^
-         | 3. HTTP PUT (Direct Binary Upload)                                        | 4. Save Record
-         v                                                                           v
-+------------------+                                                      +----------------------+
-|  Infomaniak S3   | <--------------------------------------------------+ |       MongoDB        |
-|  Object Storage  |                                                      +----------------------+
-+------------------+                                                                 
-         ^                                                                           
-         | 6. Get/List Files via S3 API                                              
-         v                                                                           
-+------------------+                                                                 
-|Cloudflare Worker | <--------------------------------------------------+            
-| (WebDAV Gateway) |                                                      |          
-+------------------+                                                      |          
-         ^                                                                |          
-         | 5. Native WebDAV Connection                                    | 3rd-Party Auth       
-         v                                                                | (Via Token/Basic Auth)
-+------------------+                                                      |          
-|Project Manager PC| -----------------------------------------------------+          
-| (Explorer/Finder)|                                                                 
-+------------------+                                                                 
+         |                                                                    ^              ^
+         | 3. HTTP PUT (Direct Binary Upload)                                 |              | 5. Mount Drive
+         v                                                                    |              |    (Basic Auth)
++------------------+                                                          |              v
+|  Infomaniak S3   | <--------------------------------------------------------+     +------------------+
+|  Object Storage  |                 4. Stream Files / List Objects                 |Project Manager PC|
++------------------+                                                                | (Explorer/Finder)|
+                                                                                    +------------------+
 ```
 
 ---
 
-## 2. Step 1: Backend Implementation (Node.js/Express)
+## 2. Step-by-Step Codebase Implementation
 
-### A. Database Schema Update
-Add the WebDAV credentials to the user schema for authentication at the gateway level.
-
+### A. Database Schema
+Add WebDAV credentials to the user schema to authenticate Windows/Mac clients.
 ```typescript
 // src/app/modules/user/user.model.ts
-companyWebdavUsername: {
-  type: String,
-  unique: true,
-  sparse: true,
-},
-companyWebdavPassword: {
-  type: String, // Encrypted securely in the database
-},
+webdavUsername: { type: String },
+webdavPassword: { type: String }, // Encrypted securely using decrypt/encrypt helpers
 ```
 
 ### B. AWS S3 Presigned URL Helper
-Install the required package:
-```bash
-npm install @aws-sdk/s3-request-presigner
-```
-
-Implement the signed URL generator:
 ```typescript
 // src/app/utils/s3.ts
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { s3Client } from "../constants/aws";
-import config from "../config";
 
-export const generatePresignedUrl = async (
-  fileName: string,
-  contentType: string
-): Promise<string> => {
+export const generatePresignedUrl = async (fileName: string, contentType: string): Promise<string> => {
   const command = new PutObjectCommand({
     Bucket: config.aws.bucket,
     Key: fileName,
     ContentType: contentType,
   });
-
-  // Generates an upload link valid for 5 minutes (300 seconds)
-  const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
-  return uploadUrl;
+  return await getSignedUrl(s3Client, command, { expiresIn: 300 }); // 5 minutes expiry
 };
 ```
 
-### C. Create Backend API Endpoints
+### C. WebDAV S3 FileSystem & Server Middleware
+```typescript
+// src/app/utils/webdav.ts
+import { v2 as webdav } from 'webdav-server';
+import { s3Client } from '../constants/aws';
+import { Upload } from '@aws-sdk/lib-storage';
+import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 
-#### 1. Generate Presigned URL
-* **Endpoint:** `GET /api/v1/work-photos/presigned-url`
-* **Controller Logic:**
-  ```typescript
-  const getUploadUrl = catchAsync(async (req, res) => {
-    const { fileName, contentType, projectName } = req.query;
-    const companyId = req.user.companyId; // Derived from auth middleware
-    
-    // Generate a unique S3 key inside the company's workspace
-    const sanitizedProject = (projectName as string).replace(/[^a-zA-Z0-9-_]/g, '_');
-    const s3Key = `workphotos/${companyId}/${sanitizedProject}/${Date.now()}_${fileName}`;
-    
-    const uploadUrl = await generatePresignedUrl(s3Key, contentType as string);
-    
-    sendResponse(res, {
-      statusCode: httpStatus.OK,
-      success: true,
-      data: { uploadUrl, fileKey: s3Key }
-    });
-  });
-  ```
+export class S3FileSystem extends webdav.FileSystem {
+  // Overrides stat, readdir, readStream, writeStream, delete using AWS SDK v3 commands.
+  // Translates webdav path `/comp_username/Project/image.jpg` to S3 key `workphotos/comp_username/Project/image.jpg`
+}
 
-#### 2. Save Metadata After Upload
-* **Endpoint:** `POST /api/v1/work-photos/save-metadata`
-* **Controller Logic:**
-  ```typescript
-  const saveMetadata = catchAsync(async (req, res) => {
-    const { fileKey, latitude, longitude, location, project } = req.body;
-    const author = req.user._id;
-    const company = req.user.companyId;
+export const webdavServer = new webdav.WebDAVServer({ port: 0 });
+webdavServer.setFileSystemSync('/', new S3FileSystem());
+```
 
-    const imageUrl = `${config.aws.s3BaseUrl}/${fileKey}`;
-    const locationUrl = latitude && longitude ? `https://www.google.com/maps?q=${latitude},${longitude}` : undefined;
+### D. Mount WebDAV in Express with Tenant Isolation
+```typescript
+// src/app.ts
+import { v2 as webdav } from 'webdav-server';
+import { webdavServer } from './app/utils/webdav';
 
-    const workPhoto = await WorkPhoto.create({
-      author,
-      company,
-      project,
-      image: imageUrl,
-      latitude,
-      longitude,
-      location,
-      locationUrl,
-      captureAt: new Date().toISOString()
-    });
-
-    sendResponse(res, {
-      statusCode: httpStatus.CREATED,
-      success: true,
-      message: 'Work photo metadata saved successfully!',
-      data: workPhoto
-    });
-  });
-  ```
+app.use('/webdav', async (req, res, next) => {
+  // 1. Validate Basic Auth (headers.authorization) using MongoDB User credentials
+  // 2. Strict Tenant Authorization: Ensure req.path starts with the authenticated user's webdavUsername
+  // 3. Handover request to WebDAV Server
+  const webdavMiddleware = (webdav as any).extensions.express('/webdav', webdavServer);
+  webdavMiddleware(req, res, next);
+});
+```
 
 ---
 
-## 3. Step 2: Client/Mobile App Implementation
+## ৩. মোবাইল অ্যাপ (Worker) ও ড্যাশবোর্ড (Project Manager) কাজের ধাপ ও API ইন্টিগ্রেশন
 
-When the worker captures a photo and uploads it:
+নিচে ফ্রন্টএন্ড এবং মোবাইল অ্যাপ ডেভেলপারদের জন্য বাংলায় বিস্তারিত গাইডলাইন দেওয়া হলো:
 
-1. **Request Upload Link:**
-   Call `/api/v1/work-photos/presigned-url` with `fileName` and `contentType`. Get `uploadUrl` and `fileKey` in response.
+### ক. মোবাইল অ্যাপ (Worker App) কাজের ধাপসমূহ
 
-2. **Direct Upload (Binary PUT):**
-   Upload the image directly to S3 via the `uploadUrl`.
-   * **Note:** Use a standard HTTP `PUT` request with binary body content, **not** multipart form-data.
-   ```javascript
-   // Axios Example:
-   await axios.put(uploadUrl, imageBlob, {
-     headers: {
-       'Content-Type': 'image/jpeg', // Must match the contentType sent in step 1
-     },
-   });
-   ```
+মোবাইল অ্যাপ থেকে ছবি আপলোড করার জন্য ধাপে ধাপে নিচের ৩টি এপিআই কল করতে হবে:
 
-3. **Confirm Metadata:**
-   Once S3 upload is complete, call `/api/v1/work-photos/save-metadata` with `fileKey`, GPS coordinates, and project details to finalize the database record.
-
----
-
-## 4. Step 3: Cloudflare Workers WebDAV-to-S3 Setup
-
-Deploy a Cloudflare Worker to serve as the WebDAV gateway interface. This worker acts as a translator between native OS WebDAV requests and S3 API calls.
-
-### Cloudflare Worker Configuration:
-Create a Cloudflare Worker and configure the following environment variables:
-* `S3_ENDPOINT`: S3 endpoint URL (e.g., `https://s3.infomaniak.com`)
-* `S3_BUCKET`: Your bucket name
-* `S3_ACCESS_KEY_ID`: S3 Access Key ID
-* `S3_SECRET_ACCESS_KEY`: S3 Secret Access Key
-
-### Worker Code Pattern:
-```javascript
-// Cloudflare Worker handler
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    const method = request.method;
-
-    // 1. Authenticate Request (Basic Authentication)
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response('Unauthorized', {
-        status: 401,
-        headers: { 'WWW-Authenticate': 'Basic realm="Company S3 WebDAV"' }
-      });
-    }
-
-    const [username, password] = parseBasicAuth(authHeader);
-    const isValid = await verifyCredentialsWithDB(username, password); // Verify against backend
-    if (!isValid) {
-      return new Response('Forbidden', { status: 403 });
-    }
-
-    // 2. Map WebDAV Methods to S3 API calls
-    switch (method) {
-      case 'PROPFIND':
-        return await handlePropfind(request, env, username); // Lists directory files from S3 XML response
-      case 'GET':
-        return await handleGet(request, env, username);      // Streams file from S3 to Client
-      case 'OPTIONS':
-        return handleOptions();                             // Handshake for Win/Mac compatibility
-      default:
-        return new Response('Method Not Allowed', { status: 405 });
+#### ১. Presigned URL এবং S3 Key সংগ্রহ করা
+ছবি তোলার সাথে সাথে অ্যাপ প্রথমে ব্যাকএন্ডের এই এপিআই-তে হিট করবে:
+* **API Endpoint:** `GET /api/v1/work-photos/presigned-url`
+* **Headers:** `Authorization: Bearer <Worker_JWT_Token>`
+* **Query Parameters:**
+  * `fileName`: ফাইলের নাম (যেমন: `work_photo_1.jpg`)
+  * `contentType`: ফাইলের ফরম্যাট (যেমন: `image/jpeg` বা `image/png`)
+  * `projectName`: প্রজেক্টের নাম (যেমন: `Bridge-Alpha`)
+* **Expected Response (200 OK):**
+  ```json
+  {
+    "statusCode": 200,
+    "success": true,
+    "message": "Presigned URL generated successfully!",
+    "data": {
+      "uploadUrl": "https://s3.infomaniak.com/bucket-name/workphotos/companyA/Bridge-Alpha/1700000000000_work_photo_1.jpg?Signature=...",
+      "fileKey": "companyA/Bridge-Alpha/1700000000000_work_photo_1.jpg"
     }
   }
-};
-```
+  ```
+
+#### ২. সরাসরি S3-তে ইমেজ ফাইল আপলোড করা
+অ্যাপ প্রথম ধাপের রেসপন্স থেকে `uploadUrl` লিঙ্কটি নিয়ে সরাসরি Infomaniak S3 সার্ভারে ফাইল সাবমিট করবে:
+* **API Endpoint:** `<ধাপ ১ থেকে প্রাপ্ত uploadUrl>`
+* **Method:** `PUT`
+* **Headers:** `Content-Type: image/jpeg` (ধাপ ১ এ পাঠানো ফরম্যাটের সাথে মিলতে হবে)
+* **Payload:** ইমেজ ফাইলের বাইনারি ডাটা (Blob, File বা Stream) সরাসরি বডিতে পাঠাতে হবে।
+* **Expected Response:** `200 OK` (সরাসরি S3 সার্ভার থেকে আসবে)।
+
+#### ৩. ব্যাকএন্ড ডাটাবেসে ইমেজ মেটাডাটা সেভ করা
+আপলোড সম্পন্ন হলে, অ্যাপ ব্যাকএন্ডকে ছবির লোকেশনসহ সেভ করার জন্য রিকোয়েস্ট পাঠাবে:
+* **API Endpoint:** `POST /api/v1/work-photos/save-metadata`
+* **Headers:** 
+  * `Authorization: Bearer <Worker_JWT_Token>`
+  * `Content-Type: application/json`
+* **Payload (JSON Body):**
+  ```json
+  {
+    "fileKey": "companyA/Bridge-Alpha/1700000000000_work_photo_1.jpg",
+    "project": "60d5ec49f1b2c52e88a38c4b", 
+    "latitude": 23.8103,
+    "longitude": 90.4125,
+    "location": "Banani, Dhaka",
+    "captureAt": "2026-07-02T11:38:00.000Z"
+  }
+  ```
+* **Expected Response (201 Created):**
+  ```json
+  {
+    "statusCode": 201,
+    "success": true,
+    "message": "Photo metadata saved successfully!",
+    "data": {
+      "_id": "60d5ec49f1b2c52e88a38c9f",
+      "author": "worker_user_id",
+      "company": "company_id",
+      "project": "60d5ec49f1b2c52e88a38c4b",
+      "image": "https://s3.infomaniak.com/bucket-name/workphotos/companyA/Bridge-Alpha/1700000000000_work_photo_1.jpg",
+      "latitude": 23.8103,
+      "longitude": 90.4125,
+      "location": "Banani, Dhaka",
+      "locationUrl": "https://www.google.com/maps?q=23.8103,90.4125",
+      "captureAt": "2026-07-02T11:38:00.000Z",
+      "createdAt": "2026-07-02T12:52:45.000Z"
+    }
+  }
+  ```
 
 ---
 
-## 5. Step 4: PC Network Drive Mount Automation
+### খ. কাস্টমার পোর্টাল ও প্রজেক্ট ম্যানেজারের কাজের ধাপসমূহ
 
-Provide downloable automation scripts in the Customer Portal under the **"PC Setup"** section.
+প্রজেক্ট ম্যানেজার ড্যাশবোর্ড থেকে সহজেই নিচের ধাপে ড্রাইভটি তার কম্পিউটারে কানেক্ট করে নিতে পারবে:
 
-### A. Windows Batch Script (`connect-drive.bat`)
-When clicked, this maps the WebDAV path directly to Windows Explorer as the `Z:` drive.
-```batch
-@echo off
-echo Connecting your company photo drive...
-net use Z: "https://webdav-gateway.yourdomain.ch/%TENANT_USERNAME%/" /user:%TENANT_USERNAME% %TENANT_PASSWORD% /persistent:yes
-echo Done! Your drive Z: is now ready in Windows Explorer.
-pause
-```
+#### ১. ড্যাশবোর্ডে ক্রেডেনশিয়ালস শো করা
+ম্যানেজার ড্যাশবোর্ডে লগইন করলে তার প্রোফাইল বা সেটিংস পেজে ডিক্রিপ্ট করা WebDAV ক্রেডেনশিয়াল দেখতে পাবে:
+* **WebDAV URL:** `https://[YOUR-VPS-DOMAIN]/webdav/comp_companyA/`
+* **Username:** `comp_companyA`
+* **Password:** `decrypted_password` (ডাটাবেস থেকে ডিক্রিপ্ট করে কাস্টমার পোর্টালে দেখানো হবে)
 
-### B. macOS AppleScript (`mount-drive.scpt`)
-When run, this mounts the folder directly under the "Locations" sidebar in Apple Finder.
-```applescript
-try
-    tell application "Finder"
-        mount volume "https://webdav-gateway.yourdomain.ch/%TENANT_USERNAME%/" as user name "%TENANT_USERNAME%" with password "%TENANT_PASSWORD%"
-    end tell
-    display dialog "Success! Your company photo drive is now connected in Finder." buttons {"OK"} default button "OK" with icon note
-on error error_message
-    display dialog "Connection failed. Please check your credentials. Error: " & error_message buttons {"OK"} default button "OK" with icon stop
-end try
-```
+#### ২. মাউন্ট স্ক্রিপ্ট ফাইল ডাউনলোড করা
+ড্যাশবোর্ডের বাটনে ক্লিক করে অপারেটিং সিস্টেম অনুযায়ী স্ক্রিপ্ট ফাইলটি ডাউনলোড করতে হবে।
+* **API Endpoint:** `GET /api/v1/work-photos/download-script`
+* **Headers:** `Authorization: Bearer <Manager_JWT_Token>`
+* **Query Parameters:**
+  * `os`: `windows` অথবা `mac`
+* **Expected Response:** 
+  * উইন্ডোজের ক্ষেত্রে: `connect-drive.bat` ফাইল ডাউনলোড স্টার্ট হবে।
+  * ম্যাকের ক্ষেত্রে: `mount-drive.scpt` ফাইল ডাউনলোড স্টার্ট হবে।
+  * ডাইনামিক ক্রেডেনশিয়ালসহ ফাইলগুলোর ভেতর এই লিঙ্কটি সেট থাকবে: `https://[YOUR-VPS-DOMAIN]/webdav/comp_companyA/`
 
----
-
-## 6. Advantages of This Architecture
-1. **Unburdened VPS (0% File Transfer Load):** High-bandwidth uploads and downloads are handled directly between S3, Cloudflare, and the clients.
-2. **Instant Directory Listings:** Project Managers view images via WebDAV dynamically (On-Demand), avoiding local storage costs.
-3. **No Software Needed:** Utilizes native OS capabilities. A single click maps the drive.
+#### ৩. এক ক্লিকে ড্রাইভ ওপেন করা
+* প্রজেক্ট ম্যানেজার জাস্ট ডাউনলোড করা ফাইলে ডাবল-ক্লিক করলেই ব্যাকএন্ডের এক্সপ্রেস মিডলওয়্যার হয়ে ইনফোম্যানিয়াক S3-এর সব ইমেজ লাইভ উইন্ডোজ ফাইল এক্সপ্লোরার বা ম্যাক ফাইন্ডারে সিঙ্ক হয়ে চলে আসবে। কোনো আলাদা সফটওয়্যার ইন্সটল বা ফাইল ডাউনলোড করতে হবে না।
