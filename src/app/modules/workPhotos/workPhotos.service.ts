@@ -8,6 +8,7 @@ import {
   uploadToS3,
   generatePresignedUrl,
   downloadFromS3,
+  fileExistsInS3,
 } from '../../utils/s3'
 import cron from 'node-cron'
 import { format, isToday, isYesterday, subDays } from 'date-fns'
@@ -688,44 +689,76 @@ const savePhotoMetadata = async (
     await Project.findByIdAndUpdate(resolvedProject, { $inc: { photosCount: 1 } });
   }
 
-  // --- Start WebDAV Sync ---
-  try {
-    const company = await User.findById(companyId);
-    if (company && company.nextcloudConnected) {
-      console.log('✅ Company has WebDAV enabled. Starting sync...');
-
-      // 1. Get WebDAV credentials
-      const credentials = await getNextcloudCredentials(companyId);
-      
-      // 2. Download file from S3
-      const fileBuffer = await downloadFromS3(fileKey);
-
-      // 3. Determine folder and file name for WebDAV
-      const safeProjectName = projectName.replace(/[^a-zA-Z0-9-_]/g, '_');
-      const folderPath = `workphoto/${safeProjectName}`;
-      // Extract original file name from the key
-      const fileName = fileKey.split('/').pop() || `file_${Date.now()}`;
-      
-      // 4. Upload to WebDAV
-      await uploadToNextcloud(
-        credentials.baseUrl,
-        credentials.username,
-        credentials.password,
-        folderPath,
-        fileName,
-        fileBuffer,
-        'application/octet-stream', // content-type is unknown here, use generic
-      );
-
-      console.log(`✅ Synced ${fileName} to WebDAV path: ${folderPath}`);
-    }
-  } catch (err: any) {
+  // --- Start WebDAV Sync (Async, Non-Blocking) ---
+  // Fire and forget: Don't await or block the main response
+  syncPhotoToWebDAV(companyId, fileKey, projectName).catch(err => {
     console.error(`⚠️ WebDAV sync failed for fileKey ${fileKey}:`, err.message);
-    // Do not re-throw error, as the main operation (DB save) was successful
-  }
+  });
   // --- End WebDAV Sync ---
 
   return workPhoto;
+};
+
+// Helper function to sync photo to WebDAV asynchronously
+const syncPhotoToWebDAV = async (companyId: string, fileKey: string, projectName: string) => {
+  try {
+    const company = await User.findById(companyId);
+    if (!company || !company.nextcloudConnected) {
+      console.log('⏭️ WebDAV sync skipped: Company not found or WebDAV not enabled');
+      return;
+    }
+
+    // ✅ CHECK IF FILE EXISTS IN S3 FIRST (with retry logic)
+    console.log(`🔍 Checking if file exists in S3: ${fileKey}`);
+    
+    let fileExists = await fileExistsInS3(fileKey);
+    let retries = 0;
+    const maxRetries = 5;
+    const retryDelayMs = 2000; // 2 seconds between retries
+
+    // Retry logic: File might not be available immediately after presigned upload
+    while (!fileExists && retries < maxRetries) {
+      retries++;
+      console.log(`⏳ File not found yet. Retry ${retries}/${maxRetries} in ${retryDelayMs}ms...`);
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+      fileExists = await fileExistsInS3(fileKey);
+    }
+
+    if (!fileExists) {
+      console.warn(`⚠️ File not found in S3 after ${maxRetries} retries: ${fileKey}`);
+      return; // Exit gracefully without throwing
+    }
+
+    console.log(`✅ File exists in S3. Starting WebDAV sync...`);
+
+    // 1. Get WebDAV credentials
+    const credentials = await getNextcloudCredentials(companyId);
+
+    // 2. Download file from S3
+    const fileBuffer = await downloadFromS3(fileKey);
+
+    // 3. Determine folder and file name for WebDAV
+    const safeProjectName = projectName.replace(/[^a-zA-Z0-9-_]/g, '_');
+    const folderPath = `workphoto/${safeProjectName}`;
+    // Extract original file name from the key
+    const fileName = fileKey.split('/').pop() || `file_${Date.now()}`;
+
+    // 4. Upload to WebDAV
+    await uploadToNextcloud(
+      credentials.baseUrl,
+      credentials.username,
+      credentials.password,
+      folderPath,
+      fileName,
+      fileBuffer,
+      'application/octet-stream', // content-type is unknown here, use generic
+    );
+
+    console.log(`✅ Synced ${fileName} to WebDAV path: ${folderPath}`);
+  } catch (err: any) {
+    console.error(`⚠️ WebDAV sync error for fileKey ${fileKey}:`, err.message);
+    // Errors are logged but not thrown - the main operation already succeeded
+  }
 };
 
 export const WorkPhotoService = {

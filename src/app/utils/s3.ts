@@ -2,6 +2,7 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -68,6 +69,24 @@ export const deleteFromS3 = async (key: string): Promise<void> => {
   } catch (error: any) {
     console.error('S3 Delete Error:', error);
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'S3 file delete failed');
+  }
+};
+
+// ====================== Check if File Exists ======================
+export const fileExistsInS3 = async (key: string): Promise<boolean> => {
+  try {
+    const command = new HeadObjectCommand({
+      Bucket: config.aws.bucket,
+      Key: key,
+    });
+    await s3Client.send(command);
+    return true;
+  } catch (error: any) {
+    if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+      return false;
+    }
+    console.error('S3 HEAD Error:', error);
+    return false;
   }
 };
 
