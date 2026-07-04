@@ -230,7 +230,8 @@ const downloadMountScript = catchAsync(async (req, res) => {
   
   // Construct WebDAV URL dynamically based on the current VPS host/domain
   const host = req.get('host');
-  const webdavUrl = `${req.protocol}://${host}/webdav/${username}/`;
+  const protocol = host?.includes('localhost') || host?.includes('127.0.0.1') ? req.protocol : 'https';
+  const webdavUrl = `${protocol}://${host}/webdav/${username}/`;
 
   if (os === 'windows') {
     res.setHeader(

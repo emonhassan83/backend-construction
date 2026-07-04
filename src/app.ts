@@ -11,6 +11,8 @@ import { decrypt } from './app/utils/encryption'
 
 const app: Application = express()
 
+app.set('trust proxy', true)
+
 //* parser
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
