@@ -13,21 +13,9 @@ const app: Application = express()
 
 app.set('trust proxy', true)
 
-//* parser
-app.use(express.json({ limit: '500mb' }));
-app.use(express.urlencoded({ limit: '500mb', extended: true }));
-
-app.use(
-   cors({
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  }),
-)
-app.use(cookieParser())
-
 // WebDAV Direct Server Connection (Strict Swiss-Made Policy)
 // Express handles basic authentication & tenant path authorization before proxying to S3 WebDAV filesystem
+// Mounted BEFORE CORS and body-parsers so OPTIONS requests are not intercepted and DAV headers are correctly returned
 app.use('/api/v1/webdav', async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
@@ -66,6 +54,19 @@ app.use('/api/v1/webdav', async (req, res, next) => {
     next(error);
   }
 });
+
+//* parser
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
+
+app.use(
+   cors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  }),
+)
+app.use(cookieParser())
 
 // application routes
 app.use('/api/v1', router)
