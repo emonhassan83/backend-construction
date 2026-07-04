@@ -16,7 +16,7 @@ import {
 } from '../../utils/generateUserName'
 import { WorkPhoto } from '../workPhotos/workPhotos.model'
 import axios from 'axios'
-import { encrypt } from '../../utils/encryption'
+import { encrypt, decrypt } from '../../utils/encryption'
 
 const addACompanyIntoDB = async (payload: Partial<TUser>) => {
   if (payload.role === USER_ROLE.admin) {
@@ -85,6 +85,11 @@ const addACompanyIntoDB = async (payload: Partial<TUser>) => {
   if (!userPayload.password) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
   }
+
+  // Generate WebDAV credentials for the company
+  const rawWebdavPass = require('crypto').randomBytes(8).toString('hex');
+  userPayload.webdavUsername = `comp_${userPayload.username}`;
+  userPayload.webdavPassword = encrypt(rawWebdavPass);
 
   const newCompany = new User(userPayload)
   await newCompany.save()
@@ -224,7 +229,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id)
     .select(
-      '_id id name username email photoUrl contactNumber company status createdAt',
+      '_id id name username email photoUrl contactNumber company role status createdAt webdavUsername webdavPassword',
     )
     .populate([{ path: 'company', select: 'name' }])
   if (!user) {
@@ -236,7 +241,24 @@ const geUserByIdFromDB = async (id: string) => {
     throw new AppError(httpStatus.FORBIDDEN, 'Your account is deleted !')
   }
 
-  return user
+  // Auto-generate WebDAV credentials if missing for project_manager (fallback)
+  if (user.role === USER_ROLE.project_manager && (!user.webdavUsername || !user.webdavPassword)) {
+    const rawWebdavPass = require('crypto').randomBytes(8).toString('hex');
+    user.webdavUsername = `comp_${user.username}`;
+    user.webdavPassword = encrypt(rawWebdavPass);
+    await user.save();
+  }
+
+  const userObj = user.toObject();
+  if (userObj.webdavPassword) {
+    try {
+      userObj.webdavPassword = decrypt(userObj.webdavPassword);
+    } catch (e) {
+      console.error('Failed to decrypt WebDAV password:', e);
+    }
+  }
+
+  return userObj;
 }
 
 const changeUserStatusFromDB = async (payload: any) => {
