@@ -653,6 +653,46 @@ const savePhotoMetadata = async (
 ) => {
   const { fileKey, latitude, longitude, location, project, captureAt } = payload;
 
+  // ⚠️ VALIDATION: Check if file actually exists in S3 BEFORE saving to database
+  console.log(`\n📋 [SAVE-METADATA] Validating upload...`);
+  console.log(`   fileKey: ${fileKey}`);
+  
+  let fileExists = await fileExistsInS3(fileKey);
+  
+  if (!fileExists) {
+    console.warn(`❌ [SAVE-METADATA] File NOT found in S3! User may have skipped Step 2 (upload).`);
+    console.warn(`   Expected to find: ${fileKey}`);
+    
+    // Try a quick double-check with brief retries
+    console.log(`   Attempting quick verification (3 retries)...`);
+    for (let i = 0; i < 3; i++) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      fileExists = await fileExistsInS3(fileKey);
+      if (fileExists) {
+        console.log(`   ✅ File found on retry ${i + 1}`);
+        break;
+      }
+    }
+    
+    if (!fileExists) {
+      console.error(`❌ FINAL: File still not found. This is the problem:`);
+      console.error(`   1. You called /presigned-url ✅`);
+      console.error(`   2. You received uploadUrl + fileKey ✅`);
+      console.error(`   3. You SKIPPED or FAILED to PUT the file to uploadUrl ❌ <-- THIS IS THE ISSUE`);
+      console.error(`   4. You called /save-metadata ✅`);
+      console.error(`   Result: File doesn't exist in S3 ❌`);
+      console.error(`\n   SOLUTION: Use the diagnostic endpoint to test the full flow:`)
+      console.error(`   GET /api/v1/work-photos/diagnostic/presigned-upload-test`);
+      
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `File not found in S3: ${fileKey}. Did you forget to upload the file in Step 2? Make sure you PUT the file to the presigned URL in Postman before calling save-metadata.`
+      );
+    }
+  }
+
+  console.log(`✅ File verified in S3. Proceeding with metadata save...`);
+
   let resolvedProject = project;
   let projectName = 'Others'; // Default project name
 
@@ -695,6 +735,9 @@ const savePhotoMetadata = async (
   if (resolvedProject) {
     await Project.findByIdAndUpdate(resolvedProject, { $inc: { photosCount: 1 } });
   }
+
+  console.log(`✅ [SAVE-METADATA] Photo metadata saved to database.`);
+  console.log(`   _id: ${workPhoto._id}`);
 
   // --- Start WebDAV Sync (Async, Non-Blocking) ---
   // Fire and forget: Don't await or block the main response
