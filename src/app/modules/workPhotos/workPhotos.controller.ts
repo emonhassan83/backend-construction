@@ -302,8 +302,31 @@ const diagnosticS3 = catchAsync(async (req, res) => {
 });
 
 const diagnosticPresignedUpload = catchAsync(async (req, res) => {
-  console.log('🧪 Running Presigned URL Upload Test...');
+  console.log('🧪 Running Presigned URL Upload Test (Default)...');
   const result = await testPresignedUpload();
+
+  sendResponse(res, {
+    statusCode: result.uploadSuccessful && result.fileVerified ? httpStatus.OK : httpStatus.BAD_REQUEST,
+    success: result.uploadSuccessful && result.fileVerified,
+    message: result.uploadSuccessful && result.fileVerified 
+      ? 'Presigned URL upload test successful!' 
+      : 'Presigned URL upload test failed',
+    data: result,
+  });
+});
+
+const diagnosticPresignedUploadWithParams = catchAsync(async (req, res) => {
+  const { fileKey, contentType, testContent } = req.query;
+  
+  console.log('🧪 Running Presigned URL Upload Test (Custom)...');
+  console.log(`   FileKey: ${fileKey}`);
+  console.log(`   ContentType: ${contentType}`);
+  
+  const result = await testPresignedUpload({
+    fileKey: fileKey as string,
+    contentType: contentType as string,
+    testContent: testContent as string,
+  });
 
   sendResponse(res, {
     statusCode: result.uploadSuccessful && result.fileVerified ? httpStatus.OK : httpStatus.BAD_REQUEST,
@@ -334,4 +357,5 @@ export const WorkPhotoControllers = {
   downloadMountScript,
   diagnosticS3,
   diagnosticPresignedUpload,
+  diagnosticPresignedUploadWithParams,
 }

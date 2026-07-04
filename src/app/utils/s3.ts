@@ -238,7 +238,11 @@ export const testS3Connection = async (): Promise<{
 };
 
 // ====================== Test Presigned URL Upload ======================
-export const testPresignedUpload = async (): Promise<{
+export const testPresignedUpload = async (params?: {
+  fileKey?: string;
+  contentType?: string;
+  testContent?: string;
+}): Promise<{
   presignedUrlGenerated: boolean;
   uploadSuccessful: boolean;
   fileVerified: boolean;
@@ -246,17 +250,22 @@ export const testPresignedUpload = async (): Promise<{
   error?: string;
 }> => {
   const details: string[] = [];
+  
+  // Use provided params or defaults
+  const testKey = params?.fileKey || `presigned-test/${Date.now()}.txt`;
+  const contentType = params?.contentType || 'text/plain';
+  const testContent = params?.testContent || 'Test presigned upload - ' + new Date().toISOString();
 
   try {
     console.log('🧪 Testing Presigned URL Upload Flow...');
-    const testKey = `presigned-test/${Date.now()}.txt`;
-    const testContent = 'Test presigned upload - ' + new Date().toISOString();
+    console.log(`   Test Key: ${testKey}`);
+    console.log(`   Content-Type: ${contentType}`);
 
     // Step 1: Generate presigned URL
     details.push('Step 1: Generating presigned URL...');
     let presignedUrl: string;
     try {
-      presignedUrl = await generatePresignedUrl(testKey, 'text/plain');
+      presignedUrl = await generatePresignedUrl(testKey, contentType);
       details.push(`✅ Presigned URL generated`);
       details.push(`   URL (first 120 chars): ${presignedUrl.substring(0, 120)}...`);
     } catch (e: any) {
@@ -276,7 +285,7 @@ export const testPresignedUpload = async (): Promise<{
       const uploadResponse = await fetch(presignedUrl, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'text/plain',
+          'Content-Type': contentType,
         },
         body: testContent,
       });

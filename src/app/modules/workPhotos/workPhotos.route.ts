@@ -22,6 +22,11 @@ router.get(
   WorkPhotoControllers.diagnosticPresignedUpload,
 )
 
+router.get(
+  '/diagnostic/presigned-upload-test/custom',
+  WorkPhotoControllers.diagnosticPresignedUploadWithParams,
+)
+
 router.post(
   '/upload-one-drive',
   auth(USER_ROLE.project_manager, USER_ROLE.worker),
