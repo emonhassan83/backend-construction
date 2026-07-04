@@ -4,7 +4,11 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { TWorkPhoto } from './workPhotos.interface'
 import { WorkPhoto } from './workPhotos.model'
 import { User } from '../user/user.model'
-import { uploadToS3, generatePresignedUrl } from '../../utils/s3'
+import {
+  uploadToS3,
+  generatePresignedUrl,
+  downloadFromS3,
+} from '../../utils/s3'
 import cron from 'node-cron'
 import { format, isToday, isYesterday, subDays } from 'date-fns'
 import axios from 'axios'
@@ -642,7 +646,14 @@ const savePhotoMetadata = async (
   const { fileKey, latitude, longitude, location, project, captureAt } = payload;
 
   let resolvedProject = project;
-  if (!resolvedProject) {
+  let projectName = 'Others'; // Default project name
+
+  if (resolvedProject) {
+    const projectData = await Project.findById(resolvedProject);
+    if (projectData) {
+      projectName = projectData.name;
+    }
+  } else {
     const othersProject = await Project.findOne({
       author: companyId,
       name: 'Others',
@@ -650,6 +661,7 @@ const savePhotoMetadata = async (
     });
     if (othersProject) {
       resolvedProject = othersProject._id.toString();
+      projectName = othersProject.name;
     }
   }
 
@@ -669,11 +681,49 @@ const savePhotoMetadata = async (
     location,
     locationUrl,
     captureAt: captureAt || new Date().toISOString(),
+    s3Key: fileKey, // Store the S3 key
   });
 
   if (resolvedProject) {
     await Project.findByIdAndUpdate(resolvedProject, { $inc: { photosCount: 1 } });
   }
+
+  // --- Start WebDAV Sync ---
+  try {
+    const company = await User.findById(companyId);
+    if (company && company.nextcloudConnected) {
+      console.log('✅ Company has WebDAV enabled. Starting sync...');
+
+      // 1. Get WebDAV credentials
+      const credentials = await getNextcloudCredentials(companyId);
+      
+      // 2. Download file from S3
+      const fileBuffer = await downloadFromS3(fileKey);
+
+      // 3. Determine folder and file name for WebDAV
+      const safeProjectName = projectName.replace(/[^a-zA-Z0-9-_]/g, '_');
+      const folderPath = `workphoto/${safeProjectName}`;
+      // Extract original file name from the key
+      const fileName = fileKey.split('/').pop() || `file_${Date.now()}`;
+      
+      // 4. Upload to WebDAV
+      await uploadToNextcloud(
+        credentials.baseUrl,
+        credentials.username,
+        credentials.password,
+        folderPath,
+        fileName,
+        fileBuffer,
+        'application/octet-stream', // content-type is unknown here, use generic
+      );
+
+      console.log(`✅ Synced ${fileName} to WebDAV path: ${folderPath}`);
+    }
+  } catch (err: any) {
+    console.error(`⚠️ WebDAV sync failed for fileKey ${fileKey}:`, err.message);
+    // Do not re-throw error, as the main operation (DB save) was successful
+  }
+  // --- End WebDAV Sync ---
 
   return workPhoto;
 };

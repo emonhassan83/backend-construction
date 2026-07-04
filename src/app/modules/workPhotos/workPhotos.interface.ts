@@ -6,6 +6,7 @@ export type TWorkPhoto = {
   company: Types.ObjectId
   project: Types.ObjectId
   image: string
+  s3Key?: string
   latitude: number
   longitude: number
   location: string

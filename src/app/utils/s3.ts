@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  GetObjectCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -67,6 +68,33 @@ export const deleteFromS3 = async (key: string): Promise<void> => {
   } catch (error: any) {
     console.error('S3 Delete Error:', error);
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'S3 file delete failed');
+  }
+};
+
+// ====================== Download Single File ======================
+export const downloadFromS3 = async (key: string): Promise<Buffer> => {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: config.aws.bucket,
+      Key: key,
+    });
+    const { Body } = await s3Client.send(command);
+
+    if (!Body) {
+      throw new AppError(httpStatus.NOT_FOUND, 'File not found in S3');
+    }
+
+    // Convert the stream to a buffer
+    return new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      (Body as any).on('data', (chunk: Buffer) => chunks.push(chunk));
+      (Body as any).on('end', () => resolve(Buffer.concat(chunks)));
+      (Body as any).on('error', reject);
+    });
+  } catch (error: any) {
+    console.error('S3 Download Error:', error);
+    if (error instanceof AppError) throw error;
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'S3 file download failed');
   }
 };
 

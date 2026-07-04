@@ -7,6 +7,7 @@ const workPhotosSchema = new Schema<TWorkPhoto>(
     company: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     project: { type: Schema.Types.ObjectId, ref: 'Project', required: false },
     image: { type: String, required: true },
+    s3Key: { type: String, required: false },
     latitude: { type: Number, required: true },
     longitude: { type: Number, required: true },
     location: { type: String, required: true },
