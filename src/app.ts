@@ -28,7 +28,7 @@ app.use(cookieParser())
 
 // WebDAV Direct Server Connection (Strict Swiss-Made Policy)
 // Express handles basic authentication & tenant path authorization before proxying to S3 WebDAV filesystem
-app.use('/webdav', async (req, res, next) => {
+app.use('/api/v1/webdav', async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     res.setHeader('WWW-Authenticate', 'Basic realm="WebDAV Storage"');
@@ -53,14 +53,14 @@ app.use('/webdav', async (req, res, next) => {
       return res.status(401).send('Unauthorized');
     }
 
-    // Path level validation: comp_companyA can only access /webdav/comp_companyA/
+    // Path level validation: comp_companyA can only access /api/v1/webdav/comp_companyA/
     const requestedUsername = req.path.split('/').filter(Boolean)[0];
     if (requestedUsername !== username) {
       return res.status(403).send('Forbidden: Access denied to this workspace');
     }
 
     // Pass to WebDAV Server
-    const webdavMiddleware = (webdav as any).extensions.express('/webdav', webdavServer);
+    const webdavMiddleware = (webdav as any).extensions.express('/api/v1/webdav', webdavServer);
     webdavMiddleware(req, res, next);
   } catch (error) {
     next(error);
