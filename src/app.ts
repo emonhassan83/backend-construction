@@ -4,8 +4,7 @@ import cookieParser from 'cookie-parser'
 import globalErrorHandler from './app/middleware/globalErrorHandler'
 import notFound from './app/middleware/notFound'
 import router from './app/routes'
-import { v2 as webdav } from 'webdav-server'
-import { webdavServer } from './app/utils/webdav'
+import { handleWebDAV } from './app/utils/webdav'
 import { User } from './app/modules/user/user.model'
 import { decrypt } from './app/utils/encryption'
 
@@ -13,56 +12,59 @@ const app: Application = express()
 
 app.set('trust proxy', true)
 
-// WebDAV Direct Server Connection (Strict Swiss-Made Policy)
-// Express handles basic authentication & tenant path authorization before proxying to S3 WebDAV filesystem
-// Mounted BEFORE CORS and body-parsers so OPTIONS requests are not intercepted and DAV headers are correctly returned
+// ────────────────────────────────────────────────────────────────────────────
+// WebDAV Gateway (Swiss-Made Policy, Self-Hosted on VPS Express Server)
+// Mounted BEFORE CORS so WebDAV OPTIONS is never swallowed by preflight handling.
+// ────────────────────────────────────────────────────────────────────────────
 app.use(async (req, res, next) => {
-  if (req.path.startsWith('/api/v1/webdav')) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
+  if (!req.path.startsWith('/api/v1/webdav')) return next();
+
+  // 1. Require Basic Auth header
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    res.setHeader('DAV', '1, 2');
+    res.setHeader('MS-Author-Via', 'DAV');
+    res.setHeader('WWW-Authenticate', 'Basic realm="WebDAV Storage"');
+    return res.status(401).send('Unauthorized');
+  }
+
+  const [type, credentials] = authHeader.split(' ');
+  if (type.toLowerCase() !== 'basic' || !credentials) {
+    return res.status(401).send('Unauthorized');
+  }
+
+  // 2. Decode credentials — handle Windows "DOMAIN\username" format
+  let [username, password] = Buffer.from(credentials, 'base64').toString().split(':');
+  if (username.includes('\\')) {
+    username = username.split('\\').pop() as string;
+  }
+
+  try {
+    // 3. Verify against DB
+    const user = await User.findOne({ webdavUsername: username });
+    if (!user || !user.webdavPassword) {
       res.setHeader('WWW-Authenticate', 'Basic realm="WebDAV Storage"');
       return res.status(401).send('Unauthorized');
     }
 
-    const [type, credentials] = authHeader.split(' ');
-    if (type.toLowerCase() !== 'basic' || !credentials) {
+    const decryptedPassword = decrypt(user.webdavPassword);
+    if (decryptedPassword !== password) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="WebDAV Storage"');
       return res.status(401).send('Unauthorized');
     }
 
-    let [username, password] = Buffer.from(credentials, 'base64').toString().split(':');
-
-    // Windows WebClient backslash bug fix (e.g., "DESKTOP-NAME\username" -> "username")
-    if (username.includes('\\')) {
-      username = username.split('\\').pop() as string;
+    // 4. Tenant isolation — allow root probe but block cross-tenant access
+    const segments = req.path.split('/').filter(Boolean); // ['api','v1','webdav','comp_xx',...]
+    const pathUsername = segments[3];
+    if (pathUsername && pathUsername !== username) {
+      return res.status(403).send('Forbidden');
     }
 
-    try {
-      const user = await User.findOne({ webdavUsername: username });
-      if (!user || !user.webdavPassword) {
-        return res.status(401).send('Unauthorized');
-      }
-
-      const decryptedPassword = decrypt(user.webdavPassword);
-      if (decryptedPassword !== password) {
-        return res.status(401).send('Unauthorized');
-      }
-
-      // Path level validation: comp_companyA can only access /api/v1/webdav/comp_companyA/
-      // Allow root path probes (/api/v1/webdav or /api/v1/webdav/) by checking segments length
-      const segments = req.path.split('/').filter(Boolean);
-      const requestedUsername = segments[3];
-      if (requestedUsername && requestedUsername !== username) {
-        return res.status(403).send('Forbidden: Access denied to this workspace');
-      }
-
-      // Pass to WebDAV Server
-      const webdavMiddleware = (webdav as any).extensions.express('/api/v1/webdav', webdavServer);
-      return webdavMiddleware(req, res, next);
-    } catch (error) {
-      return next(error);
-    }
+    // 5. Hand off to custom S3-backed WebDAV handler
+    return await handleWebDAV(req, res);
+  } catch (err) {
+    return next(err);
   }
-  next();
 });
 
 //* parser
@@ -80,12 +82,6 @@ app.use(cookieParser())
 
 // application routes
 app.use('/api/v1', router)
-
-// // Start OAuth flow -> GET /api/v1/onedrive/connect/:companyId
-// router.get('/onedrive/connect/:companyId', WorkPhotoControllers.connectOneDrive)
-
-// // Callback from Microsoft OAuth -> GET /api/v1/onedrive/callback
-// router.get('/onedrive/callback', WorkPhotoControllers.oneDriveRefreshToken)
 
 app.get('/', (req: Request, res: Response) => {
   res.json({

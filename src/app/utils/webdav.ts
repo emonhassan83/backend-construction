@@ -1,221 +1,240 @@
-// @ts-nocheck
-import { v2 as webdav } from 'webdav-server';
 import { s3Client } from '../constants/aws';
 import {
   GetObjectCommand,
   ListObjectsV2Command,
-  PutObjectCommand,
+  HeadObjectCommand,
   DeleteObjectCommand,
-  HeadObjectCommand
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import config from '../config';
-import { Readable, Writable } from 'stream';
+import { Request, Response } from 'express';
+import { PassThrough, Readable } from 'stream';
 
-// Custom S3 File System to bridge webdav-server with Infomaniak S3
-export class S3FileSystem extends webdav.FileSystem {
-  private bucket: string;
+const BUCKET = config.aws.bucket as string;
 
-  constructor() {
-    super(new webdav.LocalLockManager(), new webdav.LocalPropertyManager());
-    this.bucket = config.aws.bucket as string;
+// Convert a WebDAV path (/api/v1/webdav/comp_username/folder/file.jpg) to S3 key (workphotos/comp_username/folder/file.jpg)
+function pathToS3Key(reqPath: string): string {
+  // Strip the /api/v1/webdav prefix
+  const stripped = reqPath.replace(/^\/api\/v1\/webdav/, '').replace(/^\/+/, '');
+  if (!stripped) return '';
+  return `workphotos/${stripped}`;
+}
+
+// Build a PROPFIND multi-status XML response
+function buildPropfind(entries: { href: string; isDir: boolean; size: number; mtime: Date | null }[]): string {
+  const items = entries.map((e) => {
+    const modified = e.mtime ? e.mtime.toUTCString() : new Date(0).toUTCString();
+    const resourceType = e.isDir ? '<D:collection/>' : '';
+    const contentLength = e.isDir ? '' : `<D:getcontentlength>${e.size}</D:getcontentlength>`;
+    return `
+  <D:response>
+    <D:href>${e.href}</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:displayname>${e.href.split('/').filter(Boolean).pop() || '/'}</D:displayname>
+        <D:resourcetype>${resourceType}</D:resourcetype>
+        <D:getlastmodified>${modified}</D:getlastmodified>
+        ${contentLength}
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>`;
+  }).join('');
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+${items}
+</D:multistatus>`;
+}
+
+export async function handleWebDAV(req: Request, res: Response): Promise<void> {
+  const method = req.method.toUpperCase();
+  const reqPath = req.path;
+  const s3Key = pathToS3Key(reqPath);
+  const basePath = reqPath.endsWith('/') ? reqPath : reqPath + '/';
+
+  // WebDAV required headers on all responses
+  res.setHeader('DAV', '1, 2');
+  res.setHeader('MS-Author-Via', 'DAV');
+  res.setHeader('Allow', 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE, LOCK, UNLOCK');
+
+  // ─── OPTIONS ─────────────────────────────────────────────────────────────
+  if (method === 'OPTIONS') {
+    res.status(200).end();
+    return;
   }
 
-  protected _stat(
-    path: webdav.Path, 
-    ctx: webdav.FSInfo, 
-    callback: webdav.SimpleCallback<webdav.ResourceHelper>
-  ) {
-    const key = this.getKey(path);
-    if (!key || key === '') {
-      // Root folder
-      callback(null, {
-        type: webdav.ResourceType.Directory,
-        creationDate: 0,
-        lastModifiedDate: 0,
-        size: 0
+  // ─── PROPFIND (Directory / File Listing) ─────────────────────────────────
+  if (method === 'PROPFIND') {
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+
+    try {
+      const isRoot = !s3Key || s3Key === '';
+      const prefix = isRoot ? '' : (s3Key.endsWith('/') ? s3Key : s3Key + '/');
+
+      const listCmd = new ListObjectsV2Command({
+        Bucket: BUCKET,
+        Prefix: prefix,
+        Delimiter: '/',
       });
-      return;
-    }
 
-    // Check if key behaves like a folder (List objects under prefix)
-    const listCommand = new ListObjectsV2Command({
-      Bucket: this.bucket,
-      Prefix: key + '/',
-      MaxKeys: 1
-    });
+      const data = await s3Client.send(listCmd);
+      const entries: { href: string; isDir: boolean; size: number; mtime: Date | null }[] = [];
 
-    s3Client.send(listCommand).then((data) => {
-      if (data.Contents && data.Contents.length > 0) {
-        callback(null, {
-          type: webdav.ResourceType.Directory,
-          creationDate: 0,
-          lastModifiedDate: 0,
-          size: 0
-        });
-      } else {
-        // It's a file
-        const headCommand = new HeadObjectCommand({
-          Bucket: this.bucket,
-          Key: key
-        });
-        s3Client.send(headCommand).then((metadata) => {
-          callback(null, {
-            type: webdav.ResourceType.File,
-            creationDate: metadata.LastModified ? metadata.LastModified.getTime() : 0,
-            lastModifiedDate: metadata.LastModified ? metadata.LastModified.getTime() : 0,
-            size: metadata.ContentLength || 0
-          });
-        }).catch(() => {
-          // If S3 head fails, check if we can list it as a folder without ending slash
-          const checkFolderCommand = new ListObjectsV2Command({
-            Bucket: this.bucket,
-            Prefix: key + '/',
-            MaxKeys: 1
-          });
-          s3Client.send(checkFolderCommand).then((dataFolder) => {
-            if (dataFolder.Contents && dataFolder.Contents.length > 0) {
-              callback(null, {
-                type: webdav.ResourceType.Directory,
-                creationDate: 0,
-                lastModifiedDate: 0,
-                size: 0
-              });
-            } else {
-              callback(new Error('Resource not found'));
-            }
-          }).catch((err) => {
-            callback(err);
-          });
-        });
-      }
-    }).catch((err) => {
-      callback(err);
-    });
-  }
+      // Include the requested directory itself
+      entries.push({ href: basePath, isDir: true, size: 0, mtime: null });
 
-  protected _readdir(
-    path: webdav.Path, 
-    ctx: webdav.FSInfo, 
-    callback: webdav.SimpleCallback<string[] | webdav.Path[]>
-  ) {
-    const key = this.getKey(path);
-    const prefix = key ? key + '/' : '';
-
-    const command = new ListObjectsV2Command({
-      Bucket: this.bucket,
-      Prefix: prefix,
-      Delimiter: '/'
-    });
-
-    s3Client.send(command).then((data) => {
-      const results: string[] = [];
-
-      // Folders
+      // Sub-folders
       if (data.CommonPrefixes) {
-        for (const p of data.CommonPrefixes) {
-          if (p.Prefix) {
-            const folderName = p.Prefix.slice(prefix.length, -1);
-            if (folderName) results.push(folderName);
+        for (const cp of data.CommonPrefixes) {
+          if (cp.Prefix) {
+            // Convert S3 prefix back to HTTP path
+            const folderPart = cp.Prefix.replace(/^workphotos\//, '');
+            entries.push({
+              href: `/api/v1/webdav/${folderPart}`,
+              isDir: true,
+              size: 0,
+              mtime: null,
+            });
           }
         }
       }
 
       // Files
       if (data.Contents) {
-        for (const c of data.Contents) {
-          if (c.Key && c.Key !== prefix) {
-            const fileName = c.Key.slice(prefix.length);
-            if (fileName) results.push(fileName);
+        for (const obj of data.Contents) {
+          if (obj.Key && obj.Key !== prefix) {
+            const filePart = obj.Key.replace(/^workphotos\//, '');
+            entries.push({
+              href: `/api/v1/webdav/${filePart}`,
+              isDir: false,
+              size: obj.Size || 0,
+              mtime: obj.LastModified || null,
+            });
           }
         }
       }
 
-      callback(null, results);
-    }).catch((err) => {
-      callback(err);
-    });
+      const xml = buildPropfind(entries);
+      res.status(207).send(xml);
+    } catch (err: any) {
+      console.error('[WebDAV PROPFIND error]', err);
+      res.status(500).send('Internal Server Error');
+    }
+    return;
   }
 
-  protected _openReadStream(
-    path: webdav.Path, 
-    ctx: webdav.FSInfo, 
-    callback: webdav.SimpleCallback<Readable>
-  ) {
-    const key = this.getKey(path);
-    const command = new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: key
-    });
+  // ─── GET (Stream file from S3) ────────────────────────────────────────────
+  if (method === 'GET' || method === 'HEAD') {
+    if (!s3Key) {
+      res.status(404).end();
+      return;
+    }
+    try {
+      const headCmd = new HeadObjectCommand({ Bucket: BUCKET, Key: s3Key });
+      const meta = await s3Client.send(headCmd);
 
-    s3Client.send(command).then((data) => {
-      if (data.Body instanceof Readable) {
-        callback(null, data.Body);
+      res.setHeader('Content-Type', meta.ContentType || 'application/octet-stream');
+      res.setHeader('Content-Length', meta.ContentLength || 0);
+      if (meta.LastModified) res.setHeader('Last-Modified', meta.LastModified.toUTCString());
+
+      if (method === 'HEAD') {
+        res.status(200).end();
+        return;
+      }
+
+      const getCmd = new GetObjectCommand({ Bucket: BUCKET, Key: s3Key });
+      const obj = await s3Client.send(getCmd);
+      if (obj.Body instanceof Readable) {
+        obj.Body.pipe(res);
       } else {
-        // Handle stream conversion if body is not directly readable (depends on runtime environment)
-        const nodeReadable = Readable.from(data.Body as any);
-        callback(null, nodeReadable);
+        Readable.from(obj.Body as any).pipe(res);
       }
-    }).catch((err) => {
-      callback(err);
-    });
-  }
-
-  protected _openWriteStream(
-    path: webdav.Path, 
-    ctx: webdav.FSInfo, 
-    callback: webdav.SimpleCallback<Writable>
-  ) {
-    const key = this.getKey(path);
-    const passThrough = new (require('stream').PassThrough)();
-
-    const uploader = new Upload({
-      client: s3Client,
-      params: {
-        Bucket: this.bucket,
-        Key: key,
-        Body: passThrough
+    } catch (err: any) {
+      if (err.name === 'NoSuchKey') {
+        res.status(404).end();
+      } else {
+        console.error('[WebDAV GET error]', err);
+        res.status(500).end();
       }
-    });
-
-    uploader.done().then(() => {
-      console.log(`[WebDAV] Uploaded successfully: ${key}`);
-    }).catch((err) => {
-      console.error(`[WebDAV] Upload error: ${err.message}`);
-    });
-
-    callback(null, passThrough);
+    }
+    return;
   }
 
-  protected _delete(
-    path: webdav.Path, 
-    ctx: webdav.FSInfo, 
-    callback: webdav.SimpleCallback<boolean>
-  ) {
-    const key = this.getKey(path);
-    const command = new DeleteObjectCommand({
-      Bucket: this.bucket,
-      Key: key
-    });
+  // ─── PUT (Upload file to S3) ───────────────────────────────────────────────
+  if (method === 'PUT') {
+    if (!s3Key) {
+      res.status(400).end();
+      return;
+    }
+    try {
+      const passThrough = new PassThrough();
+      req.pipe(passThrough);
 
-    s3Client.send(command).then(() => {
-      callback(null, true);
-    }).catch((err) => {
-      callback(err);
-    });
+      const uploader = new Upload({
+        client: s3Client,
+        params: {
+          Bucket: BUCKET,
+          Key: s3Key,
+          Body: passThrough,
+          ContentType: req.headers['content-type'] || 'application/octet-stream',
+        },
+      });
+      await uploader.done();
+      res.status(201).end();
+    } catch (err: any) {
+      console.error('[WebDAV PUT error]', err);
+      res.status(500).end();
+    }
+    return;
   }
 
-  private getKey(path: webdav.Path): string {
-    const cleanPath = path.toString().replace(/^\//, '');
-    return cleanPath ? `workphotos/${cleanPath}` : '';
+  // ─── DELETE ───────────────────────────────────────────────────────────────
+  if (method === 'DELETE') {
+    if (!s3Key) {
+      res.status(400).end();
+      return;
+    }
+    try {
+      const delCmd = new DeleteObjectCommand({ Bucket: BUCKET, Key: s3Key });
+      await s3Client.send(delCmd);
+      res.status(204).end();
+    } catch (err: any) {
+      console.error('[WebDAV DELETE error]', err);
+      res.status(500).end();
+    }
+    return;
   }
+
+  // ─── MKCOL (Create folder) ────────────────────────────────────────────────
+  if (method === 'MKCOL') {
+    // S3 is flat; simulate MKCOL success
+    res.status(201).end();
+    return;
+  }
+
+  // ─── LOCK / UNLOCK (required by Windows WebClient) ───────────────────────
+  if (method === 'LOCK') {
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.status(200).send(`<?xml version="1.0" encoding="utf-8"?>
+<D:prop xmlns:D="DAV:">
+  <D:lockdiscovery>
+    <D:activelock>
+      <D:locktype><D:write/></D:locktype>
+      <D:lockscope><D:exclusive/></D:lockscope>
+      <D:depth>0</D:depth>
+      <D:timeout>Second-3600</D:timeout>
+      <D:locktoken><D:href>urn:uuid:${Date.now()}</D:href></D:locktoken>
+    </D:activelock>
+  </D:lockdiscovery>
+</D:prop>`);
+    return;
+  }
+
+  if (method === 'UNLOCK') {
+    res.status(204).end();
+    return;
+  }
+
+  res.status(405).end();
 }
-
-// Instantiate S3 File System and WebDAV Server middleware
-const s3FileSystem = new S3FileSystem();
-export const webdavServer = new webdav.WebDAVServer({
-  port: 0 // middleware mode
-});
-
-// Mount filesystem on root
-webdavServer.setFileSystemSync('/', s3FileSystem);
