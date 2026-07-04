@@ -811,6 +811,120 @@ const syncPhotoToWebDAV = async (companyId: string, fileKey: string, projectName
   }
 };
 
+// Direct upload endpoint - handles file upload, S3 storage, and metadata save in one call
+const uploadPhotoDirectly = async (
+  userId: string,
+  companyId: string,
+  file: any,
+  metadata: {
+    projectName?: string;
+    latitude?: number;
+    longitude?: number;
+    location?: string;
+    captureAt?: string;
+  }
+) => {
+  console.log('\n📦 [UPLOAD-DIRECTLY] Processing...');
+
+  // 1. Validate user and company
+  const user = await User.findById(userId);
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+  }
+
+  const company = await User.findById(companyId);
+  if (!company || company.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Company not found!');
+  }
+
+  console.log(`   ✅ User & Company validated`);
+
+  // 2. Get or create project
+  let finalProjectId: any = null;
+  let projectName = metadata.projectName || 'Others';
+
+  const othersProject = await Project.findOne({
+    author: companyId,
+    name: projectName,
+    isDeleted: false,
+  });
+
+  if (!othersProject) {
+    const defaultProject = await Project.findOne({
+      author: companyId,
+      name: 'Others',
+      isDeleted: false,
+    });
+    if (!defaultProject) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Default "Others" project not found!');
+    }
+    finalProjectId = defaultProject._id;
+    projectName = 'Others';
+  } else {
+    finalProjectId = othersProject._id;
+  }
+
+  console.log(`   ✅ Project resolved: ${projectName}`);
+
+  // 3. Upload file to S3
+  console.log(`   📤 Uploading to S3...`);
+  const timestamp = Date.now();
+  const s3Key = `workphotos/${companyId}/${projectName.replace(/[^a-zA-Z0-9-_]/g, '_')}/${timestamp}_${file.originalname}`;
+
+  let imageUrl: string;
+  try {
+    imageUrl = await uploadToS3({
+      file,
+      fileName: s3Key,
+    }) as string;
+    console.log(`   ✅ S3 upload success: ${s3Key}`);
+  } catch (err: any) {
+    console.error(`   ❌ S3 upload failed: ${err.message}`);
+    throw err;
+  }
+
+  // 4. Prepare location URL
+  const { latitude, longitude, location, captureAt } = metadata;
+  const locationUrl = latitude && longitude
+    ? `https://www.google.com/maps?q=${latitude},${longitude}`
+    : undefined;
+
+  console.log(`   ✅ Metadata prepared`);
+
+  // 5. Save to database
+  console.log(`   💾 Saving to database...`);
+  const workPhoto = await WorkPhoto.create({
+    author: userId,
+    company: companyId,
+    project: finalProjectId,
+    image: imageUrl,
+    latitude,
+    longitude,
+    location,
+    locationUrl,
+    captureAt: captureAt || new Date().toISOString(),
+    s3Key,
+  });
+
+  if (!workPhoto) {
+    throw new AppError(httpStatus.CONFLICT, 'Photo record not created!');
+  }
+
+  console.log(`   ✅ Database save success: ${workPhoto._id}`);
+
+  // 6. Increment project photo count
+  await Project.findByIdAndUpdate(
+    finalProjectId,
+    { $inc: { photosCount: 1 } },
+    { new: true }
+  );
+
+  console.log(`   ✅ Project count incremented`);
+  console.log(`✅ [UPLOAD-DIRECTLY] Complete!\n`);
+
+  return workPhoto;
+};
+
 export const WorkPhotoService = {
   connectOneDrive,
   oneDriveRefreshToken,
@@ -824,4 +938,5 @@ export const WorkPhotoService = {
   groupWorkPhotosByDate,
   getUploadPresignedUrl,
   savePhotoMetadata,
+  uploadPhotoDirectly,
 }

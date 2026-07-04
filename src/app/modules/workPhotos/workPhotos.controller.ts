@@ -233,6 +233,51 @@ const saveMetadata = catchAsync(async (req, res) => {
   });
 });
 
+const uploadPhotoDirectly = catchAsync(async (req, res) => {
+  console.log('\n📤 [DIRECT-UPLOAD] Starting direct photo upload...');
+  
+  const userId = req.user._id;
+  const file = req.file;
+  const { projectName, latitude, longitude, location, captureAt } = req.body;
+
+  console.log(`   User ID: ${userId}`);
+  console.log(`   File: ${file?.originalname}, Size: ${file?.size} bytes`);
+  console.log(`   Project: ${projectName || 'Others'}`);
+
+  if (!file) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'No file uploaded');
+  }
+
+  const dbUser = await User.findById(userId);
+  if (!dbUser || !dbUser.company) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User or company not found.');
+  }
+
+  const result = await WorkPhotoService.uploadPhotoDirectly(
+    userId as string,
+    dbUser.company.toString(),
+    file,
+    {
+      projectName,
+      latitude,
+      longitude,
+      location,
+      captureAt,
+    }
+  );
+
+  console.log(`✅ [DIRECT-UPLOAD] Complete!`);
+  console.log(`   Photo ID: ${result._id}`);
+  console.log(`   Image URL: ${result.image}`);
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Photo uploaded successfully!',
+    data: result,
+  });
+});
+
 const downloadMountScript = catchAsync(async (req, res) => {
   const { os } = req.query;
   const user = await User.findById(req.user._id);
@@ -444,6 +489,7 @@ export const WorkPhotoControllers = {
   deleteAWorkPhoto,
   getPresignedUrl,
   saveMetadata,
+  uploadPhotoDirectly,
   downloadMountScript,
   diagnosticS3,
   diagnosticPresignedUpload,

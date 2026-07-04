@@ -58,6 +58,14 @@ router.post(
   WorkPhotoControllers.saveMetadata,
 )
 
+router.post(
+  '/upload-direct',
+  auth(USER_ROLE.project_manager, USER_ROLE.worker),
+  upload.single('image'),
+  parseData(),
+  WorkPhotoControllers.uploadPhotoDirectly,
+)
+
 router.get(
   '/download-script',
   auth(USER_ROLE.project_manager),
