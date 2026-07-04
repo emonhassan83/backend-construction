@@ -23,8 +23,8 @@ router.get(
 )
 
 router.get(
-  '/diagnostic/presigned-upload-test/custom',
-  WorkPhotoControllers.diagnosticPresignedUploadWithParams,
+  '/diagnostic/full-flow',
+  WorkPhotoControllers.diagnosticFullFlow,
 )
 
 router.post(

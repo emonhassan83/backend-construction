@@ -315,6 +315,96 @@ const diagnosticPresignedUpload = catchAsync(async (req, res) => {
   });
 });
 
+const diagnosticFullFlow = catchAsync(async (req, res) => {
+  console.log('\n' + '='.repeat(80));
+  console.log('🔍 FULL FLOW DIAGNOSTIC (S3 Upload Complete Test)');
+  console.log('='.repeat(80));
+  
+  const report: any = {
+    timestamp: new Date().toISOString(),
+    config: {
+      bucket: config.aws.bucket,
+      region: config.aws.region,
+      endpoint: config.aws.endpoint,
+      forcePathStyle: config.aws.forcePathStyle,
+      s3BaseUrl: config.aws.s3BaseUrl,
+    },
+    steps: [],
+  };
+
+  try {
+    // Step 1: Connection test
+    console.log('\n📍 Step 1: Testing S3 Connection...');
+    const connTest = await testS3Connection();
+    report.steps.push({
+      step: 'S3 Connection',
+      success: connTest.isConnected,
+      details: connTest,
+    });
+
+    if (!connTest.isConnected) {
+      console.error('❌ S3 connection failed. Stopping tests.');
+      return sendResponse(res, {
+        statusCode: httpStatus.SERVICE_UNAVAILABLE,
+        success: false,
+        message: 'S3 connection failed',
+        data: report,
+      });
+    }
+
+    console.log('✅ S3 connection successful\n');
+
+    // Step 2: Presigned URL + Auto Upload test
+    console.log('📍 Step 2: Testing Presigned URL + Auto Upload...');
+    const uploadTest = await testPresignedUpload({
+      fileKey: `diagnostic/${Date.now()}_test.txt`,
+      contentType: 'text/plain',
+      testContent: 'Diagnostic test - ' + new Date().toISOString(),
+    });
+
+    report.steps.push({
+      step: 'Presigned URL Upload',
+      success: uploadTest.uploadSuccessful && uploadTest.fileVerified,
+      details: uploadTest,
+    });
+
+    if (!uploadTest.uploadSuccessful || !uploadTest.fileVerified) {
+      console.error('❌ Presigned upload test failed');
+      return sendResponse(res, {
+        statusCode: httpStatus.BAD_REQUEST,
+        success: false,
+        message: 'Presigned URL upload failed - see details',
+        data: report,
+      });
+    }
+
+    console.log('✅ Presigned URL upload successful\n');
+
+    // All tests passed
+    console.log('✅ ALL TESTS PASSED!');
+    console.log('='.repeat(80));
+    console.log('✨ Your S3 setup is working correctly!\n');
+
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      success: true,
+      message: '✅ All diagnostic tests passed! S3 is working correctly.',
+      data: report,
+    });
+
+  } catch (error: any) {
+    console.error('❌ Diagnostic failed:', error.message);
+    report.error = error.message;
+    
+    sendResponse(res, {
+      statusCode: httpStatus.INTERNAL_SERVER_ERROR,
+      success: false,
+      message: 'Diagnostic test encountered an error',
+      data: report,
+    });
+  }
+});
+
 const diagnosticPresignedUploadWithParams = catchAsync(async (req, res) => {
   const { fileKey, contentType, testContent } = req.query;
   
@@ -357,5 +447,5 @@ export const WorkPhotoControllers = {
   downloadMountScript,
   diagnosticS3,
   diagnosticPresignedUpload,
-  diagnosticPresignedUploadWithParams,
+  diagnosticFullFlow,
 }
