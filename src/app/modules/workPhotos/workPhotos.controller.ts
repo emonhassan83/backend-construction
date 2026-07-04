@@ -179,10 +179,13 @@ const deleteAWorkPhoto = catchAsync(async (req, res) => {
 
 const getPresignedUrl = catchAsync(async (req, res) => {
   const { projectName, fileName, contentType } = req.query;
-  const companyId = req.user.company;
+  const dbUser = await User.findById(req.user._id);
+  if (!dbUser || !dbUser.company) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User or company not found.');
+  }
 
   const result = await WorkPhotoService.getUploadPresignedUrl(
-    companyId as string,
+    dbUser.company.toString(),
     projectName as string,
     fileName as string,
     contentType as string,
@@ -198,11 +201,14 @@ const getPresignedUrl = catchAsync(async (req, res) => {
 
 const saveMetadata = catchAsync(async (req, res) => {
   const userId = req.user._id;
-  const companyId = req.user.company;
+  const dbUser = await User.findById(userId);
+  if (!dbUser || !dbUser.company) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User or company not found.');
+  }
 
   const result = await WorkPhotoService.savePhotoMetadata(
     userId as string,
-    companyId as string,
+    dbUser.company.toString(),
     req.body,
   );
 
