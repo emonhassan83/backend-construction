@@ -29,7 +29,12 @@ app.use(async (req, res, next) => {
       return res.status(401).send('Unauthorized');
     }
 
-    const [username, password] = Buffer.from(credentials, 'base64').toString().split(':');
+    let [username, password] = Buffer.from(credentials, 'base64').toString().split(':');
+
+    // Windows WebClient backslash bug fix (e.g., "DESKTOP-NAME\username" -> "username")
+    if (username.includes('\\')) {
+      username = username.split('\\').pop() as string;
+    }
 
     try {
       const user = await User.findOne({ webdavUsername: username });
@@ -43,8 +48,10 @@ app.use(async (req, res, next) => {
       }
 
       // Path level validation: comp_companyA can only access /api/v1/webdav/comp_companyA/
-      const requestedUsername = req.path.split('/').filter(Boolean)[3];
-      if (requestedUsername !== username) {
+      // Allow root path probes (/api/v1/webdav or /api/v1/webdav/) by checking segments length
+      const segments = req.path.split('/').filter(Boolean);
+      const requestedUsername = segments[3];
+      if (requestedUsername && requestedUsername !== username) {
         return res.status(403).send('Forbidden: Access denied to this workspace');
       }
 
