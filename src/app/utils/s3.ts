@@ -236,3 +236,133 @@ export const testS3Connection = async (): Promise<{
     };
   }
 };
+
+// ====================== Test Presigned URL Upload ======================
+export const testPresignedUpload = async (): Promise<{
+  presignedUrlGenerated: boolean;
+  uploadSuccessful: boolean;
+  fileVerified: boolean;
+  details: string[];
+  error?: string;
+}> => {
+  const details: string[] = [];
+
+  try {
+    console.log('🧪 Testing Presigned URL Upload Flow...');
+    const testKey = `presigned-test/${Date.now()}.txt`;
+    const testContent = 'Test presigned upload - ' + new Date().toISOString();
+
+    // Step 1: Generate presigned URL
+    details.push('Step 1: Generating presigned URL...');
+    let presignedUrl: string;
+    try {
+      presignedUrl = await generatePresignedUrl(testKey, 'text/plain');
+      details.push(`✅ Presigned URL generated`);
+      details.push(`   URL (first 120 chars): ${presignedUrl.substring(0, 120)}...`);
+    } catch (e: any) {
+      details.push(`❌ Failed to generate presigned URL: ${e.message}`);
+      return {
+        presignedUrlGenerated: false,
+        uploadSuccessful: false,
+        fileVerified: false,
+        details,
+        error: e.message,
+      };
+    }
+
+    // Step 2: Upload using presigned URL via fetch (simulating Postman)
+    details.push('Step 2: Uploading via presigned URL (simulating Postman PUT)...');
+    try {
+      const uploadResponse = await fetch(presignedUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: testContent,
+      });
+
+      details.push(`   Response Status: ${uploadResponse.status} ${uploadResponse.statusText}`);
+
+      if (!uploadResponse.ok) {
+        const responseText = await uploadResponse.text();
+        details.push(`   Error Response: ${responseText.substring(0, 200)}`);
+        details.push(`❌ Upload failed with status ${uploadResponse.status}`);
+        return {
+          presignedUrlGenerated: true,
+          uploadSuccessful: false,
+          fileVerified: false,
+          details,
+          error: `Upload returned ${uploadResponse.status}`,
+        };
+      }
+
+      details.push(`✅ Upload successful`);
+    } catch (e: any) {
+      details.push(`❌ Upload failed: ${e.message}`);
+      return {
+        presignedUrlGenerated: true,
+        uploadSuccessful: false,
+        fileVerified: false,
+        details,
+        error: e.message,
+      };
+    }
+
+    // Step 3: Verify file exists in S3
+    details.push('Step 3: Verifying file in S3...');
+    try {
+      const exists = await fileExistsInS3(testKey);
+      if (exists) {
+        details.push(`✅ File verified in S3`);
+        return {
+          presignedUrlGenerated: true,
+          uploadSuccessful: true,
+          fileVerified: true,
+          details,
+        };
+      } else {
+        details.push(`⚠️ Upload succeeded but file not found in S3 immediately (might be delayed)`);
+        // Give it another chance
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const existsRetry = await fileExistsInS3(testKey);
+        if (existsRetry) {
+          details.push(`✅ File verified after 2s delay`);
+          return {
+            presignedUrlGenerated: true,
+            uploadSuccessful: true,
+            fileVerified: true,
+            details,
+          };
+        } else {
+          details.push(`❌ File still not found after 2s delay - upload likely failed silently`);
+          return {
+            presignedUrlGenerated: true,
+            uploadSuccessful: true,
+            fileVerified: false,
+            details,
+            error: 'File not found in S3 after upload',
+          };
+        }
+      }
+    } catch (e: any) {
+      details.push(`❌ Verification failed: ${e.message}`);
+      return {
+        presignedUrlGenerated: true,
+        uploadSuccessful: true,
+        fileVerified: false,
+        details,
+        error: e.message,
+      };
+    }
+  } catch (error: any) {
+    console.error('🧪 Presigned URL test failed:', error);
+    details.push(`❌ Unexpected error: ${error.message}`);
+    return {
+      presignedUrlGenerated: false,
+      uploadSuccessful: false,
+      fileVerified: false,
+      details,
+      error: error.message,
+    };
+  }
+};

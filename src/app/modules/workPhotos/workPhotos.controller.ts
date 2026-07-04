@@ -6,7 +6,7 @@ import config from '../../config'
 import { User } from '../user/user.model'
 import { decrypt } from '../../utils/encryption'
 import AppError from '../../errors/AppError'
-import { testS3Connection } from '../../utils/s3'
+import { testS3Connection, testPresignedUpload } from '../../utils/s3'
 
 const connectOneDrive = catchAsync(async (req, res) => {
   const result = await WorkPhotoService.connectOneDrive(req.params.companyId as string)
@@ -301,6 +301,20 @@ const diagnosticS3 = catchAsync(async (req, res) => {
   });
 });
 
+const diagnosticPresignedUpload = catchAsync(async (req, res) => {
+  console.log('🧪 Running Presigned URL Upload Test...');
+  const result = await testPresignedUpload();
+
+  sendResponse(res, {
+    statusCode: result.uploadSuccessful && result.fileVerified ? httpStatus.OK : httpStatus.BAD_REQUEST,
+    success: result.uploadSuccessful && result.fileVerified,
+    message: result.uploadSuccessful && result.fileVerified 
+      ? 'Presigned URL upload test successful!' 
+      : 'Presigned URL upload test failed',
+    data: result,
+  });
+});
+
 export const WorkPhotoControllers = {
   connectOneDrive,
   oneDriveRefreshToken,
@@ -319,4 +333,5 @@ export const WorkPhotoControllers = {
   saveMetadata,
   downloadMountScript,
   diagnosticS3,
+  diagnosticPresignedUpload,
 }
