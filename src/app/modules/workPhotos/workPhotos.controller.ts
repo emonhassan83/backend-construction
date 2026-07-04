@@ -6,6 +6,7 @@ import config from '../../config'
 import { User } from '../user/user.model'
 import { decrypt } from '../../utils/encryption'
 import AppError from '../../errors/AppError'
+import { testS3Connection } from '../../utils/s3'
 
 const connectOneDrive = catchAsync(async (req, res) => {
   const result = await WorkPhotoService.connectOneDrive(req.params.companyId as string)
@@ -179,17 +180,29 @@ const deleteAWorkPhoto = catchAsync(async (req, res) => {
 
 const getPresignedUrl = catchAsync(async (req, res) => {
   const { projectName, fileName, contentType } = req.query;
+  
+  console.log('📥 GET /presigned-url Request:');
+  console.log(`   projectName: ${projectName || 'NOT_PROVIDED (will use Others)'}`);
+  console.log(`   fileName: ${fileName}`);
+  console.log(`   contentType: ${contentType}`);
+  
   const dbUser = await User.findById(req.user._id);
   if (!dbUser || !dbUser.company) {
     throw new AppError(httpStatus.NOT_FOUND, 'User or company not found.');
   }
 
+  console.log(`   companyId: ${dbUser.company.toString()}`);
+  
   const result = await WorkPhotoService.getUploadPresignedUrl(
     dbUser.company.toString(),
     projectName as string,
     fileName as string,
     contentType as string,
   );
+
+  console.log(`✅ Presigned URL Response:`);
+  console.log(`   fileKey: ${result.fileKey}`);
+  console.log(`   uploadUrl (first 100 chars): ${result.uploadUrl.substring(0, 100)}...`);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -276,6 +289,18 @@ const downloadMountScript = catchAsync(async (req, res) => {
   throw new AppError(httpStatus.BAD_REQUEST, 'Invalid OS parameter');
 });
 
+const diagnosticS3 = catchAsync(async (req, res) => {
+  console.log('🔧 Running S3 Diagnostic...');
+  const result = await testS3Connection();
+
+  sendResponse(res, {
+    statusCode: result.isConnected ? httpStatus.OK : httpStatus.SERVICE_UNAVAILABLE,
+    success: result.isConnected,
+    message: result.isConnected ? 'S3 Connection Successful!' : 'S3 Connection Failed',
+    data: result,
+  });
+});
+
 export const WorkPhotoControllers = {
   connectOneDrive,
   oneDriveRefreshToken,
@@ -293,4 +318,5 @@ export const WorkPhotoControllers = {
   getPresignedUrl,
   saveMetadata,
   downloadMountScript,
+  diagnosticS3,
 }

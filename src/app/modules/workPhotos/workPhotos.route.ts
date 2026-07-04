@@ -11,6 +11,12 @@ const router = express.Router()
 const storage = memoryStorage()
 const upload = multer({ storage })
 
+// Diagnostic endpoint (no auth required for testing)
+router.get(
+  '/diagnostic/s3-test',
+  WorkPhotoControllers.diagnosticS3,
+)
+
 router.post(
   '/upload-one-drive',
   auth(USER_ROLE.project_manager, USER_ROLE.worker),

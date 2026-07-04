@@ -18,6 +18,11 @@ export const generatePresignedUrl = async (
   contentType: string,
 ): Promise<string> => {
   try {
+    console.log(`📝 Generating presigned URL for S3 Upload:`);
+    console.log(`   Bucket: ${config.aws.bucket}`);
+    console.log(`   Key: ${fileName}`);
+    console.log(`   ContentType: ${contentType}`);
+    
     const command = new PutObjectCommand({
       Bucket: config.aws.bucket,
       Key: fileName,
@@ -25,9 +30,11 @@ export const generatePresignedUrl = async (
     });
 
     const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
+    console.log(`✅ Presigned URL generated successfully`);
+    console.log(`   URL (first 150 chars): ${uploadUrl.substring(0, 150)}...`);
     return uploadUrl;
   } catch (error: any) {
-    console.error('Presigned URL Generation Error:', error);
+    console.error('❌ Presigned URL Generation Error:', error);
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to generate upload URL');
   }
 };
@@ -169,5 +176,63 @@ export const deleteManyFromS3 = async (keys: string[]): Promise<void> => {
   } catch (error: any) {
     console.error('S3 Multiple Delete Error:', error);
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'S3 files delete failed');
+  }
+};
+
+// ====================== S3 Connection Diagnostic ======================
+export const testS3Connection = async (): Promise<{
+  isConnected: boolean;
+  bucket: string;
+  region: string;
+  baseUrl: string;
+  error?: string;
+}> => {
+  try {
+    const testKey = `test-connection/${Date.now()}.txt`;
+    
+    console.log('🔗 Testing S3 Connection...');
+    console.log(`   Bucket: ${config.aws.bucket}`);
+    console.log(`   Region: ${config.aws.region}`);
+    console.log(`   Base URL: ${config.aws.s3BaseUrl}`);
+
+    // Try to upload a test file
+    const command = new PutObjectCommand({
+      Bucket: config.aws.bucket,
+      Key: testKey,
+      Body: Buffer.from('test connection'),
+      ContentType: 'text/plain',
+    });
+
+    await s3Client.send(command);
+    
+    console.log(`✅ S3 Connection Test Passed!`);
+    console.log(`   Test file uploaded to: ${testKey}`);
+
+    // Clean up test file
+    try {
+      const deleteCmd = new DeleteObjectCommand({
+        Bucket: config.aws.bucket,
+        Key: testKey,
+      });
+      await s3Client.send(deleteCmd);
+    } catch (e) {
+      console.log('Note: Could not delete test file');
+    }
+
+    return {
+      isConnected: true,
+      bucket: config.aws.bucket || 'UNKNOWN',
+      region: config.aws.region || 'UNKNOWN',
+      baseUrl: config.aws.s3BaseUrl || 'UNKNOWN',
+    };
+  } catch (error: any) {
+    console.error(`❌ S3 Connection Test Failed:`, error);
+    return {
+      isConnected: false,
+      bucket: config.aws.bucket || 'UNKNOWN',
+      region: config.aws.region || 'UNKNOWN',
+      baseUrl: config.aws.s3BaseUrl || 'UNKNOWN',
+      error: error.message || 'Unknown error',
+    };
   }
 };

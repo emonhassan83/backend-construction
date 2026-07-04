@@ -633,7 +633,14 @@ const getUploadPresignedUrl = async (
   contentType: string,
 ) => {
   const safeProjectName = (projectName || 'Others').replace(/[^a-zA-Z0-9-_]/g, '_');
-  const s3Key = `workphotos/${companyId}/${safeProjectName}/${Date.now()}_${fileName}`;
+  const timestamp = Date.now();
+  const s3Key = `workphotos/${companyId}/${safeProjectName}/${timestamp}_${fileName}`;
+
+  console.log(`📊 S3 Key Construction:`);
+  console.log(`   Original projectName: ${projectName || 'null'}`);
+  console.log(`   Safe projectName: ${safeProjectName}`);
+  console.log(`   Timestamp: ${timestamp}`);
+  console.log(`   Final S3 Key: ${s3Key}`);
 
   const uploadUrl = await generatePresignedUrl(s3Key, contentType);
   return { uploadUrl, fileKey: s3Key };
