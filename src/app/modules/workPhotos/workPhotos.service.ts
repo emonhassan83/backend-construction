@@ -641,6 +641,18 @@ const savePhotoMetadata = async (
 ) => {
   const { fileKey, latitude, longitude, location, project, captureAt } = payload;
 
+  let resolvedProject = project;
+  if (!resolvedProject) {
+    const othersProject = await Project.findOne({
+      author: companyId,
+      name: 'Others',
+      isDeleted: false,
+    });
+    if (othersProject) {
+      resolvedProject = othersProject._id.toString();
+    }
+  }
+
   const imageUrl = `${config.aws.s3BaseUrl}/${fileKey}`;
   const locationUrl =
     latitude && longitude
@@ -650,7 +662,7 @@ const savePhotoMetadata = async (
   const workPhoto = await WorkPhoto.create({
     author: userId,
     company: companyId,
-    project: project || undefined,
+    project: resolvedProject || undefined,
     image: imageUrl,
     latitude,
     longitude,
@@ -659,8 +671,8 @@ const savePhotoMetadata = async (
     captureAt: captureAt || new Date().toISOString(),
   });
 
-  if (project) {
-    await Project.findByIdAndUpdate(project, { $inc: { photosCount: 1 } });
+  if (resolvedProject) {
+    await Project.findByIdAndUpdate(resolvedProject, { $inc: { photosCount: 1 } });
   }
 
   return workPhoto;
