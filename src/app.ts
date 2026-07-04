@@ -61,6 +61,9 @@ app.use(async (req, res, next) => {
     }
 
     // 5. Hand off to custom S3-backed WebDAV handler
+    // Attach company ID and username for S3 path mapping
+    (req as any).webdavCompanyId = user.company?.toString() || '';
+    (req as any).webdavUsername = username;
     return await handleWebDAV(req, res);
   } catch (err) {
     return next(err);
