@@ -54,7 +54,11 @@ Authorization: Bearer YOUR_WORKER_JWT_TOKEN
   "message": "Presigned URL generated successfully!",
   "data": {
     "uploadUrl": "https://s3.infomaniak.com/bucket-name/workphotos/companyId/Others/1783148108960_test_photo.jpg?Signature=...",
-    "fileKey": "workphotos/companyId/Others/1783148108960_test_photo.jpg"
+    "fileKey": "workphotos/companyId/Others/1783148108960_test_photo.jpg",
+    "contentType": "image/jpeg",
+    "uploadHeaders": {
+      "Content-Type": "image/jpeg"
+    }
   }
 }
 ```
@@ -80,6 +84,11 @@ Content-Type: image/jpeg
 - Select: `binary` (in Postman)
 - Click: "Select File" → choose an image from your computer
 - The file content will be sent as-is to S3
+- Use the exact `data.uploadHeaders` returned by Step 1. Do not hard-code or
+  change the MIME type between Step 1 and Step 2 (`image/jpg` is normalized to
+  `image/jpeg` by the backend).
+- Check the PUT response before calling Step 3. Only call `save-metadata` when
+  the S3 response status is successful (normally 200).
 
 **Expected Response (200 OK)**:
 - Postman will show: `Status: 200 OK`

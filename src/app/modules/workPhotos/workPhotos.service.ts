@@ -632,9 +632,28 @@ const getUploadPresignedUrl = async (
   fileName: string,
   contentType: string,
 ) => {
+  if (!fileName?.trim()) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'fileName is required!');
+  }
+
+  // `image/jpg` is a common value from mobile clients, but the registered MIME
+  // type is `image/jpeg`. The value used to sign the request must exactly match
+  // the Content-Type sent with the subsequent PUT request.
+  const normalizedContentType = contentType?.toLowerCase().trim() === 'image/jpg'
+    ? 'image/jpeg'
+    : contentType?.toLowerCase().trim();
+
+  if (!normalizedContentType || !['image/jpeg', 'image/png'].includes(normalizedContentType)) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Only image/jpeg and image/png files are supported!',
+    );
+  }
+
   const safeProjectName = (projectName || 'Others').replace(/[^a-zA-Z0-9-_]/g, '_');
+  const safeFileName = fileName.trim().replace(/[^a-zA-Z0-9._-]/g, '_');
   const timestamp = Date.now();
-  const s3Key = `workphotos/${companyId}/${safeProjectName}/${timestamp}_${fileName}`;
+  const s3Key = `workphotos/${companyId}/${safeProjectName}/${timestamp}_${safeFileName}`;
 
   console.log(`📊 S3 Key Construction:`);
   console.log(`   Original projectName: ${projectName || 'null'}`);
@@ -642,8 +661,16 @@ const getUploadPresignedUrl = async (
   console.log(`   Timestamp: ${timestamp}`);
   console.log(`   Final S3 Key: ${s3Key}`);
 
-  const uploadUrl = await generatePresignedUrl(s3Key, contentType);
-  return { uploadUrl, fileKey: s3Key };
+  const uploadUrl = await generatePresignedUrl(s3Key, normalizedContentType);
+
+  // Return the canonical header so clients do not have to guess it. They must
+  // use this exact value when PUTting the raw file body to S3.
+  return {
+    uploadUrl,
+    fileKey: s3Key,
+    contentType: normalizedContentType,
+    uploadHeaders: { 'Content-Type': normalizedContentType },
+  };
 };
 
 const savePhotoMetadata = async (
@@ -656,6 +683,12 @@ const savePhotoMetadata = async (
   // ⚠️ VALIDATION: Check if file actually exists in S3 BEFORE saving to database
   console.log(`\n📋 [SAVE-METADATA] Validating upload...`);
   console.log(`   fileKey: ${fileKey}`);
+
+  // A user may only confirm an object created inside their own company prefix.
+  const expectedPrefix = `workphotos/${companyId}/`;
+  if (!fileKey.startsWith(expectedPrefix)) {
+    throw new AppError(httpStatus.FORBIDDEN, 'Invalid file key for this company!');
+  }
   
   let fileExists = await fileExistsInS3(fileKey);
   
