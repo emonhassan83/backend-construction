@@ -12,12 +12,33 @@ import { PassThrough, Readable } from 'stream';
 
 const BUCKET = config.aws.bucket as string;
 
-// Convert a WebDAV path (/api/v1/webdav/comp_username/folder/file.jpg) to S3 key (workphotos/comp_username/folder/file.jpg)
-function pathToS3Key(reqPath: string): string {
-  // Strip the /api/v1/webdav prefix
-  const stripped = reqPath.replace(/^\/api\/v1\/webdav/, '').replace(/^\/+/, '');
-  if (!stripped) return '';
-  return `workphotos/${stripped}`;
+// The public WebDAV URL is keyed by a friendly username, while S3 is isolated
+// by the immutable company id:
+// /api/v1/webdav/comp_acme/Project_A/photo.jpg
+// -> workphotos/<companyId>/Project_A/photo.jpg
+function pathToS3Key(reqPath: string, webdavUsername: string, companyId: string): string {
+  const stripped = reqPath.replace(/^\/api\/v1\/webdav\/?/, '').replace(/^\/+|\/+$/g, '');
+  const segments = stripped.split('/').filter(Boolean);
+
+  if (segments[0] === webdavUsername) segments.shift();
+
+  const relativePath = segments.join('/');
+  return relativePath
+    ? `workphotos/${companyId}/${relativePath}`
+    : `workphotos/${companyId}`;
+}
+
+function s3KeyToWebDAVPath(
+  s3Key: string,
+  companyId: string,
+  webdavUsername: string,
+): string {
+  const companyPrefix = `workphotos/${companyId}/`;
+  const relativePath = s3Key.startsWith(companyPrefix)
+    ? s3Key.slice(companyPrefix.length)
+    : '';
+
+  return `/api/v1/webdav/${webdavUsername}/${relativePath}`;
 }
 
 // Build a PROPFIND multi-status XML response
@@ -50,7 +71,15 @@ ${items}
 export async function handleWebDAV(req: Request, res: Response): Promise<void> {
   const method = req.method.toUpperCase();
   const reqPath = req.path;
-  const s3Key = pathToS3Key(reqPath);
+  const companyId = (req as any).webdavCompanyId as string;
+  const webdavUsername = (req as any).webdavUsername as string;
+
+  if (!companyId || !webdavUsername) {
+    res.status(403).send('WebDAV tenant context is missing');
+    return;
+  }
+
+  const s3Key = pathToS3Key(reqPath, webdavUsername, companyId);
   const basePath = reqPath.endsWith('/') ? reqPath : reqPath + '/';
 
   // WebDAV required headers on all responses
@@ -69,8 +98,7 @@ export async function handleWebDAV(req: Request, res: Response): Promise<void> {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
 
     try {
-      const isRoot = !s3Key || s3Key === '';
-      const prefix = isRoot ? '' : (s3Key.endsWith('/') ? s3Key : s3Key + '/');
+      const prefix = s3Key.endsWith('/') ? s3Key : s3Key + '/';
 
       const listCmd = new ListObjectsV2Command({
         Bucket: BUCKET,
@@ -88,10 +116,8 @@ export async function handleWebDAV(req: Request, res: Response): Promise<void> {
       if (data.CommonPrefixes) {
         for (const cp of data.CommonPrefixes) {
           if (cp.Prefix) {
-            // Convert S3 prefix back to HTTP path
-            const folderPart = cp.Prefix.replace(/^workphotos\//, '');
             entries.push({
-              href: `/api/v1/webdav/${folderPart}`,
+              href: s3KeyToWebDAVPath(cp.Prefix, companyId, webdavUsername),
               isDir: true,
               size: 0,
               mtime: null,
@@ -104,9 +130,8 @@ export async function handleWebDAV(req: Request, res: Response): Promise<void> {
       if (data.Contents) {
         for (const obj of data.Contents) {
           if (obj.Key && obj.Key !== prefix) {
-            const filePart = obj.Key.replace(/^workphotos\//, '');
             entries.push({
-              href: `/api/v1/webdav/${filePart}`,
+              href: s3KeyToWebDAVPath(obj.Key, companyId, webdavUsername),
               isDir: false,
               size: obj.Size || 0,
               mtime: obj.LastModified || null,
