@@ -304,9 +304,6 @@ const downloadMountScript = catchAsync(async (req, res) => {
     );
     res.setHeader('Content-Type', 'application/octet-stream');
 
-    const webdavHost = host?.split(':')[0];
-    const webdavUncPath = `\\\\${webdavHost}@SSL\\DavWWWRoot\\api\\v1\\webdav\\${username}`;
-
     const scriptContent =
       `@echo off\r\n` +
       `setlocal\r\n` +
@@ -323,7 +320,7 @@ const downloadMountScript = catchAsync(async (req, res) => {
       `)\r\n` +
       `echo Connecting your company photo drive...\r\n` +
       `net use Z: /delete /y >nul 2>&1\r\n` +
-      `net use Z: "${webdavUncPath}" /user:"${username}" "${password}" /persistent:yes\r\n` +
+      `net use Z: "${webdavUrl}" /user:"${username}" "${password}" /persistent:yes\r\n` +
       `if errorlevel 1 (\r\n` +
       `  echo ERROR: The WebDAV drive could not be connected.\r\n` +
       `  pause\r\n` +
