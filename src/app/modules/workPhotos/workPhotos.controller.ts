@@ -302,14 +302,37 @@ const downloadMountScript = catchAsync(async (req, res) => {
       'Content-Disposition',
       'attachment; filename="connect-drive.bat"',
     );
-    res.setHeader('Content-Type', 'application/bat');
+    res.setHeader('Content-Type', 'application/octet-stream');
+
+    const webdavHost = host?.split(':')[0];
+    const webdavUncPath = `\\\\${webdavHost}@SSL\\DavWWWRoot\\api\\v1\\webdav\\${username}`;
 
     const scriptContent =
       `@echo off\r\n` +
+      `setlocal\r\n` +
+      `echo Checking the Windows WebClient service...\r\n` +
+      `sc query WebClient | find "RUNNING" >nul\r\n` +
+      `if errorlevel 1 (\r\n` +
+      `  echo Starting WebClient...\r\n` +
+      `  net start WebClient >nul 2>&1\r\n` +
+      `  if errorlevel 1 (\r\n` +
+      `    echo ERROR: WebClient could not be started. Run this file as Administrator.\r\n` +
+      `    pause\r\n` +
+      `    exit /b 1\r\n` +
+      `  )\r\n` +
+      `)\r\n` +
       `echo Connecting your company photo drive...\r\n` +
-      `net use Z: "${webdavUrl}" /user:${username} ${password} /persistent:yes\r\n` +
+      `net use Z: /delete /y >nul 2>&1\r\n` +
+      `net use Z: "${webdavUncPath}" /user:"${username}" "${password}" /persistent:yes\r\n` +
+      `if errorlevel 1 (\r\n` +
+      `  echo ERROR: The WebDAV drive could not be connected.\r\n` +
+      `  pause\r\n` +
+      `  exit /b 1\r\n` +
+      `)\r\n` +
       `echo Done! Your drive Z: is now ready in Windows Explorer.\r\n` +
-      `pause`;
+      `start "" explorer.exe Z:\\\r\n` +
+      `pause\r\n` +
+      `endlocal`;
     return res.send(scriptContent);
   } else if (os === 'mac') {
     res.setHeader(
