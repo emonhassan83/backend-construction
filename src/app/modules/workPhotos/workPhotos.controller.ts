@@ -307,23 +307,22 @@ const downloadMountScript = catchAsync(async (req, res) => {
     const scriptContent =
       `@echo off\r\n` +
       `setlocal\r\n` +
+      `if /I "%~1"=="--configure" goto configure\r\n` +
+      `\r\n` +
       `net session >nul 2>&1\r\n` +
-      `if errorlevel 1 (\r\n` +
-      `  echo ERROR: Right-click this file and choose Run as administrator.\r\n` +
+      `if not errorlevel 1 (\r\n` +
+      `  echo ERROR: Do not run this file as administrator. Double-click it normally.\r\n` +
       `  pause\r\n` +
       `  exit /b 1\r\n` +
       `)\r\n` +
-      `echo Configuring Windows WebDAV for ${protocol}://${host}...\r\n` +
-      `reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters" /v AuthForwardServerList /t REG_MULTI_SZ /d "${protocol}://${host}" /f >nul\r\n` +
-      `reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters" /v ServerNotFoundCacheLifeTimeInSec /t REG_DWORD /d 0 /f >nul\r\n` +
-      `echo Restarting the Windows WebClient service...\r\n` +
-      `net stop WebClient >nul 2>&1\r\n` +
-      `net start WebClient >nul 2>&1\r\n` +
+      `echo Requesting permission to configure Windows WebDAV...\r\n` +
+      `powershell.exe -NoProfile -Command "$p = Start-Process -FilePath '%~f0' -ArgumentList '--configure' -Verb RunAs -PassThru -Wait; exit $p.ExitCode"\r\n` +
       `if errorlevel 1 (\r\n` +
-      `  echo ERROR: WebClient could not be started.\r\n` +
+      `  echo ERROR: Windows WebDAV configuration was cancelled or failed.\r\n` +
       `  pause\r\n` +
       `  exit /b 1\r\n` +
       `)\r\n` +
+      `\r\n` +
       `echo Connecting your company photo drive...\r\n` +
       `net use Z: /delete /y >nul 2>&1\r\n` +
       `net use Z: "${webdavUrl}" /user:"${username}" "${password}" /persistent:yes\r\n` +
@@ -335,6 +334,19 @@ const downloadMountScript = catchAsync(async (req, res) => {
       `echo Done! Your drive Z: is now ready in Windows Explorer.\r\n` +
       `start "" explorer.exe Z:\\\r\n` +
       `pause\r\n` +
+      `exit /b 0\r\n` +
+      `\r\n` +
+      `:configure\r\n` +
+      `echo Configuring Windows WebDAV for ${protocol}://${host}...\r\n` +
+      `reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters" /v AuthForwardServerList /t REG_MULTI_SZ /d "${protocol}://${host}" /f >nul\r\n` +
+      `if errorlevel 1 exit /b 1\r\n` +
+      `reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters" /v ServerNotFoundCacheLifeTimeInSec /t REG_DWORD /d 0 /f >nul\r\n` +
+      `if errorlevel 1 exit /b 1\r\n` +
+      `net stop WebClient >nul 2>&1\r\n` +
+      `net start WebClient >nul 2>&1\r\n` +
+      `if errorlevel 1 exit /b 1\r\n` +
+      `exit /b 0\r\n` +
+      `\r\n` +
       `endlocal`;
     return res.send(scriptContent);
   } else if (os === 'mac') {
