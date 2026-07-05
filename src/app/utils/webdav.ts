@@ -98,44 +98,49 @@ export async function handleWebDAV(req: Request, res: Response): Promise<void> {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
 
     try {
+      const depth = String(req.headers.depth ?? 'infinity').toLowerCase();
       const prefix = s3Key.endsWith('/') ? s3Key : s3Key + '/';
-
-      const listCmd = new ListObjectsV2Command({
-        Bucket: BUCKET,
-        Prefix: prefix,
-        Delimiter: '/',
-      });
-
-      const data = await s3Client.send(listCmd);
       const entries: { href: string; isDir: boolean; size: number; mtime: Date | null }[] = [];
 
       // Include the requested directory itself
       entries.push({ href: basePath, isDir: true, size: 0, mtime: null });
 
-      // Sub-folders
-      if (data.CommonPrefixes) {
-        for (const cp of data.CommonPrefixes) {
-          if (cp.Prefix) {
-            entries.push({
-              href: s3KeyToWebDAVPath(cp.Prefix, companyId, webdavUsername),
-              isDir: true,
-              size: 0,
-              mtime: null,
-            });
+      // Depth: 0 is a capability/property probe. Returning descendants here
+      // violates WebDAV semantics and Windows WebClient rejects the mount.
+      if (depth !== '0') {
+        const listCmd = new ListObjectsV2Command({
+          Bucket: BUCKET,
+          Prefix: prefix,
+          Delimiter: '/',
+        });
+
+        const data = await s3Client.send(listCmd);
+
+        // Immediate sub-folders
+        if (data.CommonPrefixes) {
+          for (const cp of data.CommonPrefixes) {
+            if (cp.Prefix) {
+              entries.push({
+                href: s3KeyToWebDAVPath(cp.Prefix, companyId, webdavUsername),
+                isDir: true,
+                size: 0,
+                mtime: null,
+              });
+            }
           }
         }
-      }
 
-      // Files
-      if (data.Contents) {
-        for (const obj of data.Contents) {
-          if (obj.Key && obj.Key !== prefix) {
-            entries.push({
-              href: s3KeyToWebDAVPath(obj.Key, companyId, webdavUsername),
-              isDir: false,
-              size: obj.Size || 0,
-              mtime: obj.LastModified || null,
-            });
+        // Immediate files
+        if (data.Contents) {
+          for (const obj of data.Contents) {
+            if (obj.Key && obj.Key !== prefix) {
+              entries.push({
+                href: s3KeyToWebDAVPath(obj.Key, companyId, webdavUsername),
+                isDir: false,
+                size: obj.Size || 0,
+                mtime: obj.LastModified || null,
+              });
+            }
           }
         }
       }

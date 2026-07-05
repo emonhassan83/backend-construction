@@ -19,6 +19,25 @@ app.set('trust proxy', true)
 app.use(async (req, res, next) => {
   if (!req.path.startsWith('/api/v1/webdav')) return next();
 
+  // Windows WebClient probes WebDAV support with an unauthenticated OPTIONS
+  // request before it submits Basic credentials. Rejecting this discovery
+  // probe with 401 can surface as `System error 67` even though authenticated
+  // PROPFIND works. OPTIONS exposes capabilities only, never tenant data.
+  if (req.method === 'OPTIONS') {
+    res.setHeader('DAV', '1, 2');
+    res.setHeader('MS-Author-Via', 'DAV');
+    res.setHeader(
+      'Allow',
+      'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, LOCK, UNLOCK',
+    );
+    res.setHeader(
+      'Public',
+      'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, LOCK, UNLOCK',
+    );
+    res.setHeader('Content-Length', '0');
+    return res.status(200).end();
+  }
+
   // 1. Require Basic Auth header
   const authHeader = req.headers.authorization;
   if (!authHeader) {

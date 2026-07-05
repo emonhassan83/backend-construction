@@ -307,16 +307,22 @@ const downloadMountScript = catchAsync(async (req, res) => {
     const scriptContent =
       `@echo off\r\n` +
       `setlocal\r\n` +
-      `echo Checking the Windows WebClient service...\r\n` +
-      `sc query WebClient | find "RUNNING" >nul\r\n` +
+      `net session >nul 2>&1\r\n` +
       `if errorlevel 1 (\r\n` +
-      `  echo Starting WebClient...\r\n` +
-      `  net start WebClient >nul 2>&1\r\n` +
-      `  if errorlevel 1 (\r\n` +
-      `    echo ERROR: WebClient could not be started. Run this file as Administrator.\r\n` +
-      `    pause\r\n` +
-      `    exit /b 1\r\n` +
-      `  )\r\n` +
+      `  echo ERROR: Right-click this file and choose Run as administrator.\r\n` +
+      `  pause\r\n` +
+      `  exit /b 1\r\n` +
+      `)\r\n` +
+      `echo Configuring Windows WebDAV for ${protocol}://${host}...\r\n` +
+      `reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters" /v AuthForwardServerList /t REG_MULTI_SZ /d "${protocol}://${host}" /f >nul\r\n` +
+      `reg add "HKLM\\SYSTEM\\CurrentControlSet\\Services\\WebClient\\Parameters" /v ServerNotFoundCacheLifeTimeInSec /t REG_DWORD /d 0 /f >nul\r\n` +
+      `echo Restarting the Windows WebClient service...\r\n` +
+      `net stop WebClient >nul 2>&1\r\n` +
+      `net start WebClient >nul 2>&1\r\n` +
+      `if errorlevel 1 (\r\n` +
+      `  echo ERROR: WebClient could not be started.\r\n` +
+      `  pause\r\n` +
+      `  exit /b 1\r\n` +
       `)\r\n` +
       `echo Connecting your company photo drive...\r\n` +
       `net use Z: /delete /y >nul 2>&1\r\n` +
