@@ -108,6 +108,12 @@ router.get(
 )
 
 router.get(
+  '/project/:projectId/my-work-photos',
+  auth(USER_ROLE.worker),
+  WorkPhotoControllers.getMyWorkPhotosByProject,
+)
+
+router.get(
   '/default/:companyId',
   auth(USER_ROLE.worker, USER_ROLE.project_manager, USER_ROLE.admin),
   WorkPhotoControllers.getDefaultPhotosByCompany,

@@ -95,6 +95,22 @@ const getWorkPhotosByProject = catchAsync(async (req, res) => {
   })
 })
 
+const getMyWorkPhotosByProject = catchAsync(async (req, res) => {
+  const query = {
+    ...req.query,
+    project: req.params.projectId,
+    author: req.user._id,
+  }
+  const result = await WorkPhotoService.groupWorkPhotosByDate(query)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'My project work photos retrieved successfully!',
+    data: result,
+  })
+})
+
 const getDefaultPhotosByCompany = catchAsync(async (req, res) => {
   const query = {
     ...req.query,
@@ -495,6 +511,7 @@ export const WorkPhotoControllers = {
   uploadFileNextcloud,
   createWorkPhoto,
   getWorkPhotosByProject,
+  getMyWorkPhotosByProject,
   getDefaultPhotosByCompany,
   getAllWorkersWorkPhotos,
   getMyWorkPhotos,
