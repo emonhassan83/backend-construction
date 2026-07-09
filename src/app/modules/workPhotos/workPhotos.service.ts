@@ -151,7 +151,7 @@ const oneDriveRefreshToken = async (code: string, state: string) => {
         oneDriveConnected: true,
         oneDriveConnectedAt: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after' },
     )
 
     if (!updated) throw new Error('Company not found')
@@ -241,7 +241,7 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   await Project.findByIdAndUpdate(
     finalProjectId,
     { $inc: { photosCount: 1 } },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   // OneDrive আপলোড (যদি কানেক্টেড থাকে)
@@ -379,7 +379,7 @@ const uploadWorkPhotoNextcloud = async (
   await Project.findByIdAndUpdate(
     finalProjectId,
     { $inc: { photosCount: 1 } },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   // 9. Upload to Nextcloud/kDrive (if company connected)
@@ -582,7 +582,7 @@ const updateWorkPhotoFromDB = async (
   }
 
   const updatedWorkPhoto = await WorkPhoto.findByIdAndUpdate(id, payload, {
-    new: true,
+    returnDocument: 'after'
   })
   if (!updatedWorkPhoto) {
     throw new AppError(
@@ -612,7 +612,7 @@ const deleteAWorkPhotoFromDB = async (id: string) => {
       await Project.findByIdAndUpdate(
         workPhoto.project,
         { $inc: { photosCount: -1 } },
-        { new: true, session },
+        { returnDocument: 'after', session },
       );
     }
 
@@ -949,7 +949,7 @@ const uploadPhotoDirectly = async (
   await Project.findByIdAndUpdate(
     finalProjectId,
     { $inc: { photosCount: 1 } },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   console.log(`   ✅ Project count incremented`);

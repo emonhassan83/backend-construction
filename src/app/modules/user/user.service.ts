@@ -103,7 +103,7 @@ const addACompanyIntoDB = async (payload: Partial<TUser>) => {
     {
       company: newCompany._id,
     },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   // Send invitation email
@@ -273,7 +273,7 @@ const changeUserStatusFromDB = async (payload: any) => {
   const updateUserStatus = await User.findByIdAndUpdate(
     userId,
     { status },
-    { new: true },
+    { returnDocument: 'after' },
   ).select('_id id name email photoUrl contactNumber status')
   if (!updateUserStatus) {
     throw new AppError(
@@ -306,7 +306,7 @@ const updateUserInfoFromDB = async (
   // console.log(payload)
 
   const updatedUser = await User.findByIdAndUpdate(userId, payload, {
-    new: true,
+    returnDocument: 'after'
   }).select('_id id name email photoUrl contactNumber status')
   if (!updatedUser) {
     throw new AppError(
@@ -329,7 +329,7 @@ const deleteAUserFromDB = async (userId: string) => {
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     { isDeleted: true },
-    { new: true },
+    { returnDocument: 'after' },
   ).select('_id id name email photoUrl contactNumber status isDeleted')
 
   if (!updatedUser) {
@@ -387,7 +387,7 @@ const connectNextcloud = async (companyId: string, payload: any) => {
       nextcloudConnected: true,
       nextcloudConnectedAt: new Date(),
     },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   return {

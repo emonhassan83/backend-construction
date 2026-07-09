@@ -90,7 +90,7 @@ const deleteContents = async (id: string) => {
         isDeleted: true,
       },
     },
-    { new: true },
+    { returnDocument: 'after' },
   )
 
   if (!result) {

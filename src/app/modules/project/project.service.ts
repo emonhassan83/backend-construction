@@ -163,7 +163,7 @@ const updateProjectFromDB = async (
   }
 
   const updatedProject = await Project.findByIdAndUpdate(id, payload, {
-    new: true,
+    returnDocument: 'after'
   })
   if (!updatedProject) {
     throw new AppError(
@@ -186,7 +186,7 @@ const deleteAProjectFromDB = async (id: string) => {
     {
       isDeleted: true,
     },
-    { new: true },
+    { returnDocument: 'after' },
   )
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Project record delete failed')
