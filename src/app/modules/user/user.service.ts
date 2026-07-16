@@ -17,6 +17,10 @@ import {
 import { WorkPhoto } from '../workPhotos/workPhotos.model'
 import axios from 'axios'
 import { encrypt, decrypt } from '../../utils/encryption'
+import crypto from 'crypto'
+
+const generateEightDigitPassword = () =>
+  crypto.randomInt(10000000, 100000000).toString()
 
 const addACompanyIntoDB = async (payload: Partial<TUser>) => {
   if (payload.role === USER_ROLE.admin) {
@@ -33,15 +37,19 @@ const addACompanyIntoDB = async (payload: Partial<TUser>) => {
     )
   }
 
+  const plainPassword = generateEightDigitPassword()
+
   // Prepare final payload with default values
   const userPayload = {
     ...payload,
+    password: plainPassword,
     verification: {
       otp: '0',
       status: true,
     },
     expireAt: null,
   }
+  userPayload.role = USER_ROLE.project_manager
 
   // Check for existing user
   const existingUser = await User.findOne({ email: userPayload.email })
@@ -56,6 +64,12 @@ const addACompanyIntoDB = async (payload: Partial<TUser>) => {
         await createDefaultOthersProject(user)
       }
 
+      await addCompanyInvitationMail(
+        userPayload.name!,
+        userPayload.email!,
+        plainPassword,
+      )
+
       return user
     }
 
@@ -69,6 +83,12 @@ const addACompanyIntoDB = async (payload: Partial<TUser>) => {
         await createDefaultOthersProject(user)
       }
 
+      await addCompanyInvitationMail(
+        userPayload.name!,
+        userPayload.email!,
+        plainPassword,
+      )
+
       return user
     }
 
@@ -80,14 +100,9 @@ const addACompanyIntoDB = async (payload: Partial<TUser>) => {
 
   // New user — set role to 'company' if not already set
   userPayload.role = USER_ROLE.project_manager
-  userPayload.password = payload.password
-
-  if (!userPayload.password) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Password is required')
-  }
 
   // Generate WebDAV credentials for the company
-  const rawWebdavPass = require('crypto').randomBytes(8).toString('hex');
+  const rawWebdavPass = crypto.randomBytes(8).toString('hex');
   userPayload.webdavUsername = `comp_${userPayload.username}`;
   userPayload.webdavPassword = encrypt(rawWebdavPass);
 
@@ -110,7 +125,7 @@ const addACompanyIntoDB = async (payload: Partial<TUser>) => {
   await addCompanyInvitationMail(
     userPayload.name!,
     userPayload.email!,
-    userPayload.password,
+    plainPassword,
   )
 
   return newCompany

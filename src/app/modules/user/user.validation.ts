@@ -9,13 +9,10 @@ const createCompanyValidationSchema = z.object({
     }),
     email: z.string({
       message: 'Email is required!',
-    }).optional(),
+    }).email(),
     contactNumber: z.string({
       message: 'Contact number is required!',
-    }),
-    password: z.string({
-      message: 'Password is required!',
-    }),
+    })
   }),
 })
 

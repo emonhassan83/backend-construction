@@ -5,7 +5,7 @@ import config from './app/config'
 import { errorlogger, logger } from './app/utils/logger'
 import initializeSocketIO from './socket'
 import { seeder } from './app/seeder/seed'
-import { scheduleOldWorkImageCleanup } from './app/modules/workPhotos/workPhotos.service'
+import { initializeCronJobs } from './app/jobs/jobScheduler'
 import colors from 'colors';
 
 let server: Server
@@ -20,7 +20,7 @@ async function main() {
     // default task added
     seeder.seedAdmin()
     seeder.seedContents()
-    scheduleOldWorkImageCleanup()
+    initializeCronJobs()
 
     server = app.listen(Number(config.port), config.ip as string, () => {
      console.log(

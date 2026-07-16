@@ -17,6 +17,7 @@ import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
 import { REGISTER_WITH } from '../user/user.constant'
 import { TUser } from '../user/user.interface'
+import { otpEmailTemplate } from '../../templates/email'
 
 const loginUser = async (payload: TLoginUser) => {
   //* checking if the user is exist
@@ -521,26 +522,7 @@ const forgetPassword = async (payload: { email: string }) => {
   await emailSender(
     user?.email,
     'Your One-Time OTP',
-    `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-        <div style="text-align: left; padding: 10px 20px;">
-          <h2 style="color: #333;">Your One-Time OTP</h2>
-          <p style="color: #555; margin-top: 10px;">Dear ${user?.name},</p>
-          <p style="color: #555;">Use the following One-Time Password (OTP) to proceed with your request. This OTP is valid for a limited time.</p>
-          <div style="text-align: center; margin: 20px 0;">
-            <span style="padding: 10px 20px; font-size: 18px; font-weight: bold; border-radius: 5px; display: inline-block;">
-              ${otp}
-            </span>
-          </div>
-          <p style="color: #555;">This OTP is valid until: <strong>${expiresAt.toLocaleString()}</strong></p>
-          <p style="color: #555;">If you did not request this OTP, please ignore this email.</p>
-          <p style="color: #555;">Thank you,<br/>Appliance Fit Checker Team</p>
-        </div>
-        <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
-          <p>&copy; ${new Date().getFullYear()} Appliance Fit Checker. All rights reserved.</p>
-        </div>
-      </div>
-    `,
+    otpEmailTemplate({ name: user?.name, otp, expiresAt: expiresAt.toDate() }),
   )
 
   // Send a notification to the user informing them about the forgot password request

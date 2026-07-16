@@ -10,8 +10,7 @@ import {
   downloadFromS3,
   fileExistsInS3,
 } from '../../utils/s3'
-import cron from 'node-cron'
-import { format, isToday, isYesterday, subDays } from 'date-fns'
+import { format, isToday, isYesterday } from 'date-fns'
 import axios from 'axios'
 import * as fs from 'fs'
 import config from '../../config'
@@ -25,71 +24,7 @@ import {
   uploadToNextcloud,
 } from '../../utils/nextcloud'
 import mongoose from 'mongoose'
-
-export const scheduleOldWorkImageCleanup = () => {
-  cron.schedule('0 2 * * *', async () => {
-    console.log('[CRON] 🕐 Starting old work photo cleanup...');
-
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-      const thresholdDate = subDays(new Date(), 30);
-
-      // Find photos to delete first (need project IDs for count update)
-      const oldPhotos = await WorkPhoto.find({
-        createdAt: { $lt: thresholdDate },
-      })
-        .select('project')
-        .session(session)
-        .lean();
-
-      if (!oldPhotos.length) {
-        console.log('[CRON] 📭 No old work photos to delete.');
-        await session.abortTransaction();
-        return;
-      }
-
-      // Group by project — count how many photos per project to delete
-      const projectCountMap = new Map<string, number>();
-      for (const photo of oldPhotos) {
-        if (!photo.project) continue;
-        const key = photo.project.toString();
-        projectCountMap.set(key, (projectCountMap.get(key) ?? 0) + 1);
-      }
-
-      // Delete all old photos
-      const deleteResult = await WorkPhoto.deleteMany({
-        createdAt: { $lt: thresholdDate },
-      }).session(session);
-
-      // Decrement photosCount for each affected project in parallel
-      await Promise.all(
-        Array.from(projectCountMap.entries()).map(([projectId, count]) =>
-          Project.findByIdAndUpdate(
-            projectId,
-            { $inc: { photosCount: -count } },
-            { session },
-          ),
-        ),
-      );
-
-      await session.commitTransaction();
-
-      console.log(
-        `[CRON] ✅ Deleted ${deleteResult.deletedCount} work photos older than 30 days.`,
-      );
-      console.log(
-        `[CRON] 📊 Updated photosCount for ${projectCountMap.size} projects.`,
-      );
-    } catch (error) {
-      await session.abortTransaction();
-      console.error('[CRON] ❌ Work photo cleanup failed, transaction rolled back:', error);
-    } finally {
-      session.endSession();
-    }
-  });
-};
+import { trackWorkPhotoUploadNotification } from './uploadNotification/workPhotoUploadNotification.utils'
 
 // OneDrive Connect (OAuth Redirect)
 const connectOneDrive = async (companyId: string) => {
@@ -245,6 +180,12 @@ const uploadFileOneDrive = async (payload: any, file: any, userId: string) => {
   )
 
   // OneDrive আপলোড (যদি কানেক্টেড থাকে)
+  trackWorkPhotoUploadNotification({
+    companyId: company._id,
+    projectId: finalProjectId,
+    workerId: user._id,
+  })
+
   if (company.oneDriveConnected && file) {
     try {
       const accessToken = await getAccessTokenFromRefresh(
@@ -383,6 +324,12 @@ const uploadWorkPhotoNextcloud = async (
   )
 
   // 9. Upload to Nextcloud/kDrive (if company connected)
+  trackWorkPhotoUploadNotification({
+    companyId: company._id,
+    projectId: finalProjectId,
+    workerId: user._id,
+  })
+
   if (company.nextcloudConnected && file) {
     try {
       const credentials = await getNextcloudCredentials(company._id.toString())
@@ -476,6 +423,12 @@ const createWorkPhotoIntoDB = async (
   if (!workPhoto) {
     throw new AppError(httpStatus.CONFLICT, 'Work Photo record not created!')
   }
+
+  trackWorkPhotoUploadNotification({
+    companyId: company._id,
+    projectId: payload.project,
+    workerId: user._id,
+  })
 
   return workPhoto
 }
@@ -769,6 +722,12 @@ const savePhotoMetadata = async (
     await Project.findByIdAndUpdate(resolvedProject, { $inc: { photosCount: 1 } });
   }
 
+  trackWorkPhotoUploadNotification({
+    companyId,
+    projectId: resolvedProject,
+    workerId: userId,
+  })
+
   console.log(`✅ [SAVE-METADATA] Photo metadata saved to database.`);
   console.log(`   _id: ${workPhoto._id}`);
 
@@ -951,6 +910,12 @@ const uploadPhotoDirectly = async (
     { $inc: { photosCount: 1 } },
     { returnDocument: 'after' }
   );
+
+  trackWorkPhotoUploadNotification({
+    companyId,
+    projectId: finalProjectId,
+    workerId: userId,
+  })
 
   console.log(`   ✅ Project count incremented`);
   console.log(`✅ [UPLOAD-DIRECTLY] Complete!\n`);
