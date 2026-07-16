@@ -60,7 +60,7 @@ export const trackWorkPhotoUploadNotification = async ({
           lastUploadedAt: new Date(),
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
     )
 
     if (counter.count < INSTANT_PUSH_PHOTO_THRESHOLD) return

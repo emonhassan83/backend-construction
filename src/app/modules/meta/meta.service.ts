@@ -60,8 +60,7 @@ const getCompanyMetaData = async (query: Record<string, unknown>, user: any) => 
   })
 
   const totalImageCount = await WorkPhoto.countDocuments({
-    company: user._id,
-    isDeleted: false,
+    company: user._id
   })
 
   const selectedUserYear = query.year
