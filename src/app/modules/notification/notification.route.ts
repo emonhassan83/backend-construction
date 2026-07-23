@@ -11,6 +11,12 @@ router.post(
   NotificationControllers.sentGeneralNotification,
 )
 
+router.post(
+  '/test-push',
+  auth(USER_ROLE.admin),
+  NotificationControllers.createNotification,
+)
+
 router.delete(
   '/my-notifications',
   auth(USER_ROLE.admin, USER_ROLE.worker, USER_ROLE.project_manager),

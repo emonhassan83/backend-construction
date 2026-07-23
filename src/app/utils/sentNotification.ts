@@ -27,8 +27,10 @@ initializeApp({
 export const sendNotification = async (
   fcmToken: string[],
   payload: TNotification,
+  options: { persist?: boolean } = {},
 ): Promise<any> => {
   console.log('payload', payload);
+  const { persist = true } = options;
   try {
     if (!payload?.receiver) {
       throw new AppError(httpStatus.BAD_REQUEST, 'Receiver ID is required')
@@ -67,7 +69,7 @@ export const sendNotification = async (
  
     console.log(response?.responses, "from send notification");
  
-    if (response.successCount > 0) {
+    if (persist && response.successCount > 0) {
       await Notification.create(payload);
     }
  

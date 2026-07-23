@@ -6,18 +6,40 @@ import { Notification } from './notification.model'
 import moment from 'moment'
 import { User } from '../user/user.model'
 import { USER_ROLE } from '../user/user.constant'
+import { sendNotification } from '../../utils/sentNotification'
 
 const createNotificationIntoDB = async (payload: TNotification) => {
-  const notification = await Notification.create(payload)
+  const { modelType, ...notificationPayload } = payload
+  const normalizedPayload = {
+    ...notificationPayload,
+    model_type: payload.model_type || modelType,
+  }
+
+  const notification = await Notification.create(normalizedPayload)
   if (!notification) {
     throw new AppError(httpStatus.CONFLICT, 'Notification not created!')
+  }
+
+  const receiver = await User.findById(normalizedPayload.receiver).select(
+    'fcmToken',
+  )
+
+  if (receiver?.fcmToken) {
+    await sendNotification([receiver.fcmToken], normalizedPayload, {
+      persist: false,
+    })
+  } else {
+    console.log('[NOTIFICATION_TEST] Receiver has no FCM token. Push skipped.')
   }
 
   //@ts-ignore
   const io = global?.socketio
   if (io) {
-    const ver = 'notification::' + payload?.receiver
-    io.emit(ver, { ...payload, createdAt: moment().format('YYYY-MM-DD') })
+    const ver = 'notification::' + normalizedPayload?.receiver
+    io.emit(ver, {
+      ...normalizedPayload,
+      createdAt: moment().format('YYYY-MM-DD'),
+    })
   }
 
   return notification

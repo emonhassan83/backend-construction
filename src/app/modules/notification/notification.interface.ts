@@ -3,9 +3,7 @@ import { Types } from 'mongoose'
 export enum modeType {
   Auth = 'Auth',
   User = 'User',
-  ApplianceFit = 'ApplianceFit',
-  Payment = 'Payment',
-  Project = 'Project',
+  WorkPhoto = 'WorkPhoto'
 }
 
 export type TNotification = {
@@ -14,6 +12,7 @@ export type TNotification = {
   description?: string
   reference?: Types.ObjectId | string
   model_type?: modeType
+  modelType?: modeType
   date?: Date
   read?: boolean
   isDeleted?: boolean
