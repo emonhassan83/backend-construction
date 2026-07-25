@@ -83,9 +83,11 @@ const getAllWorkersWorkPhotos = catchAsync(async (req, res) => {
 const getWorkPhotosByProject = catchAsync(async (req, res) => {
   const query = {
     ...req.query,
-    project: req.params.projectId
   }
-  const result = await WorkPhotoService.groupWorkPhotosByDate(query)
+  const result = await WorkPhotoService.groupWorkPhotosByProject(
+    req.params.projectId as string,
+    query,
+  )
 
   sendResponse(res, {
     success: true,
@@ -98,10 +100,12 @@ const getWorkPhotosByProject = catchAsync(async (req, res) => {
 const getMyWorkPhotosByProject = catchAsync(async (req, res) => {
   const query = {
     ...req.query,
-    project: req.params.projectId,
     author: req.user._id,
   }
-  const result = await WorkPhotoService.groupWorkPhotosByDate(query)
+  const result = await WorkPhotoService.groupWorkPhotosByProject(
+    req.params.projectId as string,
+    query,
+  )
 
   sendResponse(res, {
     success: true,

@@ -495,6 +495,32 @@ const groupWorkPhotosByDate = async (query: Record<string, unknown>) => {
   return result
 }
 
+const groupWorkPhotosByProject = async (
+  projectId: string,
+  query: Record<string, unknown> = {},
+) => {
+  const project = await Project.findById(projectId).select('_id author name')
+  if (!project || project.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
+  }
+
+  const { project: _project, page, limit, sort, fields, searchTerm, ...restQuery } = query
+  const safeProjectName = toSafeProjectName(project.name)
+
+  return groupWorkPhotosByDate({
+    ...restQuery,
+    $or: [
+      { project: project._id },
+      {
+        company: project.author,
+        s3Key: {
+          $regex: `^workphotos/${project.author.toString()}/${safeProjectName}/`,
+        },
+      },
+    ],
+  })
+}
+
 const getAWorkPhotosFromDB = async (id: string) => {
   const workPhoto = await WorkPhoto.findById(id)
     .populate([
@@ -956,6 +982,7 @@ export const WorkPhotoService = {
   updateWorkPhotoFromDB,
   deleteAWorkPhotoFromDB,
   groupWorkPhotosByDate,
+  groupWorkPhotosByProject,
   getUploadPresignedUrl,
   savePhotoMetadata,
   uploadPhotoDirectly,
