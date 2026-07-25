@@ -26,6 +26,9 @@ import {
 import mongoose from 'mongoose'
 import { trackWorkPhotoUploadNotification } from './uploadNotification/workPhotoUploadNotification.utils'
 
+const toSafeProjectName = (projectName: string) =>
+  projectName.replace(/[^a-zA-Z0-9-_]/g, '_')
+
 // OneDrive Connect (OAuth Redirect)
 const connectOneDrive = async (companyId: string) => {
   // PKCE জেনারেট করো
@@ -681,21 +684,40 @@ const savePhotoMetadata = async (
 
   let resolvedProject = project;
   let projectName = 'Others'; // Default project name
+  const fileKeyProjectFolder = fileKey.split('/')[2] || 'Others';
 
   if (resolvedProject) {
-    const projectData = await Project.findById(resolvedProject);
-    if (projectData) {
-      projectName = projectData.name;
-    }
-  } else {
-    const othersProject = await Project.findOne({
+    const projectData = await Project.findOne({
+      _id: resolvedProject,
       author: companyId,
-      name: 'Others',
       isDeleted: false,
     });
-    if (othersProject) {
-      resolvedProject = othersProject._id.toString();
-      projectName = othersProject.name;
+    if (projectData) {
+      projectName = projectData.name;
+    } else {
+      console.warn(
+        `[SAVE-METADATA] Ignoring invalid project ${resolvedProject} for company ${companyId}. Resolving from fileKey folder: ${fileKeyProjectFolder}`,
+      );
+      resolvedProject = undefined;
+    }
+  }
+
+  if (!resolvedProject) {
+    const companyProjects = await Project.find({
+      author: companyId,
+      isDeleted: false,
+    }).select('_id name');
+
+    const projectFromFileKey = companyProjects.find(
+      (companyProject) => toSafeProjectName(companyProject.name) === fileKeyProjectFolder,
+    );
+    const fallbackProject =
+      projectFromFileKey ||
+      companyProjects.find((companyProject) => companyProject.name === 'Others');
+
+    if (fallbackProject) {
+      resolvedProject = fallbackProject._id.toString();
+      projectName = fallbackProject.name;
     }
   }
 

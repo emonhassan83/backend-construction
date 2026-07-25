@@ -3,7 +3,9 @@ import { Types } from 'mongoose'
 export enum modeType {
   Auth = 'Auth',
   User = 'User',
-  WorkPhoto = 'WorkPhoto'
+  WorkPhoto = 'WorkPhoto',
+  Project = 'Project',
+  Achievement = 'Achievement',
 }
 
 export type TNotification = {

@@ -20,7 +20,8 @@ const createProject = catchAsync(async (req, res) => {
 const getAllCompanyProjects = catchAsync(async (req, res) => {
   const query = {
     ...req.query,
-    author: req.params.companyId
+    author: req.params.companyId,
+    photoAuthor: req.user.role === 'worker' ? req.user._id : undefined,
   }
   const result = await ProjectService.getAllProjectsFromDB(query)
 
@@ -36,7 +37,8 @@ const getAllCompanyProjects = catchAsync(async (req, res) => {
 const getMyProjects = catchAsync(async (req, res) => {
   const query = {
     ...req.query,
-    author: req.user._id
+    author: req.user._id,
+    photoAuthor: undefined,
   }
   const result = await ProjectService.getAllProjectsFromDB(query)
 

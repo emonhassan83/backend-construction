@@ -32,6 +32,53 @@ const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
   const limit = Number(query.limit) || 10;
   const skip = (page - 1) * limit;
   const searchTerm = query.searchTerm as string | undefined;
+  const photoAuthor = query.photoAuthor;
+  const workPhotoCollectionName = WorkPhoto.collection.name;
+  const photoMatchExpressions: Record<string, any>[] = [
+    {
+      $or: [
+        {
+          $eq: [
+            { $toString: '$project' },
+            { $toString: '$$projectId' },
+          ],
+        },
+        {
+          $and: [
+            {
+              $eq: [
+                { $toString: '$company' },
+                { $toString: '$$companyId' },
+              ],
+            },
+            {
+              $regexMatch: {
+                input: { $ifNull: ['$s3Key', ''] },
+                regex: {
+                  $concat: [
+                    '^workphotos/',
+                    { $toString: '$$companyId' },
+                    '/',
+                    '$$safeProjectName',
+                    '/',
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  if (photoAuthor) {
+    photoMatchExpressions.push({
+      $eq: [
+        { $toString: '$author' },
+        String(photoAuthor),
+      ],
+    });
+  }
 
   // ── Base match ─────────────────────────────────────────────────────────────
   const matchStage: Record<string, any> = { isDeleted: false };
@@ -42,15 +89,36 @@ const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
     Project.aggregate([
       { $match: matchStage },
 
+      {
+        $addFields: {
+          safeProjectName: {
+            $replaceAll: {
+              input: '$name',
+              find: ' ',
+              replacement: '_',
+            },
+          },
+        },
+      },
+
       // ── Join latest WorkPhoto upload per project ───────────────────────────
       {
         $lookup: {
-          from: 'workphotos',
-          let: { projectId: '$_id' },
+          from: workPhotoCollectionName,
+          let: {
+            projectId: '$_id',
+            companyId: '$author',
+            safeProjectName: '$safeProjectName',
+          },
           pipeline: [
-            { $match: { $expr: { $eq: ['$project', '$$projectId'] } } },
+            {
+              $match: {
+                $expr: {
+                  $and: photoMatchExpressions,
+                },
+              },
+            },
             { $sort: { createdAt: -1 } },
-            { $limit: 1 },
             { $project: { createdAt: 1 } },
           ],
           as: 'lastPhoto',
@@ -60,9 +128,21 @@ const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
       // ── Count actual photos ────────────────────────────────────────────────
       {
         $lookup: {
-          from: 'workphotos',
-          localField: '_id',
-          foreignField: 'project',
+          from: workPhotoCollectionName,
+          let: {
+            projectId: '$_id',
+            companyId: '$author',
+            safeProjectName: '$safeProjectName',
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: photoMatchExpressions,
+                },
+              },
+            },
+          ],
           as: 'allPhotos',
         },
       },
@@ -87,7 +167,7 @@ const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
       },
 
       // ── Clean up lookup arrays ─────────────────────────────────────────────
-      { $unset: ['lastPhoto', 'allPhotos'] },
+      { $unset: ['lastPhoto', 'allPhotos', 'safeProjectName'] },
 
       // ── Sort: most recently active project first ───────────────────────────
       { $sort: { sortKey: -1 } },
@@ -104,31 +184,6 @@ const getAllProjectsFromDB = async (query: Record<string, unknown>) => {
 
   const total = countResult[0]?.total ?? 0;
 
-  // ── Fire-and-forget: fix stale photosCount in DB ───────────────────────────
-  const stale = projects.filter(
-    (p) => p.photosCount !== p.photosCount, // compare with DB value if needed
-  );
-
-  // Better stale check — compare aggregate count vs stored count
-  Project.find({ _id: { $in: projects.map((p) => p._id) } })
-    .select('photosCount')
-    .lean()
-    .then((dbProjects) => {
-      const dbMap = new Map(dbProjects.map((p) => [p._id.toString(), p.photosCount]));
-      const toFix = projects.filter(
-        (p) => dbMap.get(p._id.toString()) !== p.photosCount,
-      );
-      if (toFix.length > 0) {
-        Promise.all(
-          toFix.map((p) =>
-            Project.findByIdAndUpdate(p._id, { $set: { photosCount: p.photosCount } }),
-          ),
-        ).catch((err) =>
-          console.error('[Projects] ⚠️ Failed to sync stale photosCount:', err),
-        );
-      }
-    })
-    .catch(() => {});
 
   return {
     meta: {

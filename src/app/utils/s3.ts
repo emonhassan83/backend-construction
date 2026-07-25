@@ -1,6 +1,5 @@
 import {
   DeleteObjectCommand,
-  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -164,15 +163,33 @@ export const deleteManyFromS3 = async (keys: string[]): Promise<void> => {
   if (!keys.length) return;
 
   try {
-    const command = new DeleteObjectsCommand({
-      Bucket: config.aws.bucket,
-      Delete: {
-        Objects: keys.map((key) => ({ Key: key })),
-        Quiet: true,
-      },
-    });
+    const uniqueKeys = Array.from(new Set(keys));
+    const chunkSize = 25;
 
-    await s3Client.send(command);
+    for (let i = 0; i < uniqueKeys.length; i += chunkSize) {
+      const chunk = uniqueKeys.slice(i, i + chunkSize);
+      const results = await Promise.allSettled(
+        chunk.map((key) =>
+          s3Client.send(
+            new DeleteObjectCommand({
+              Bucket: config.aws.bucket,
+              Key: key,
+            }),
+          ),
+        ),
+      );
+
+      const failed = results.filter((result) => result.status === 'rejected');
+      if (failed.length) {
+        console.error(
+          `S3 Multiple Delete Error: ${failed.length}/${chunk.length} files failed to delete`,
+          failed.map((result) =>
+            result.status === 'rejected' ? result.reason : null,
+          ),
+        );
+        throw new Error('Some S3 files failed to delete');
+      }
+    }
   } catch (error: any) {
     console.error('S3 Multiple Delete Error:', error);
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'S3 files delete failed');
