@@ -8,10 +8,11 @@ const loginUser = catchAsync(async (req, res) => {
   const result = await AuthServices.loginUser(req.body)
   const { refreshToken, accessToken, user } = result
 
+  const isProd = config.node_env === 'production'
   res.cookie('refreshToken', refreshToken, {
-    secure: config.node_env === 'production',
+    secure: isProd,
     httpOnly: true,
-    sameSite: 'none',
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: 1000 * 60 * 60 * 24 * 365,
   })
 
@@ -30,10 +31,11 @@ const loginWorker = catchAsync(async (req, res) => {
   const result = await AuthServices.loginWorker(req.body)
   const { refreshToken, accessToken, user } = result
 
+  const isProd = config.node_env === 'production'
   res.cookie('refreshToken', refreshToken, {
-    secure: config.node_env === 'production',
+    secure: isProd,
     httpOnly: true,
-    sameSite: 'none',
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: 1000 * 60 * 60 * 24 * 365,
   })
 
@@ -52,16 +54,13 @@ const registerWithGoogle = catchAsync(async (req, res) => {
   const result = await AuthServices.registerWithGoogle(req.body)
   const { refreshToken } = result
 
-  const cookieOptions: any = {
-    secure: false,
+  const isProd = config.node_env === 'production'
+  res.cookie('refreshToken', refreshToken, {
+    secure: isProd,
     httpOnly: true,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: 1000 * 60 * 60 * 24 * 365,
-  }
-
-  if (config.node_env === 'production') {
-    cookieOptions.sameSite = 'none'
-  }
-  res.cookie('refreshToken', refreshToken, cookieOptions)
+  })
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -75,16 +74,13 @@ const registerWithFacebook = catchAsync(async (req, res) => {
   const result = await AuthServices.registerWithFacebook(req.body)
   const { refreshToken } = result
 
-  const cookieOptions: any = {
-    secure: false,
+  const isProd = config.node_env === 'production'
+  res.cookie('refreshToken', refreshToken, {
+    secure: isProd,
     httpOnly: true,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: 1000 * 60 * 60 * 24 * 365,
-  }
-
-  if (config.node_env === 'production') {
-    cookieOptions.sameSite = 'none'
-  }
-  res.cookie('refreshToken', refreshToken, cookieOptions)
+  })
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

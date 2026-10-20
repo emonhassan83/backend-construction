@@ -1,16 +1,18 @@
 import express, { Application, Request, Response } from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import helmet from 'helmet'
 import globalErrorHandler from './app/middleware/globalErrorHandler'
 import notFound from './app/middleware/notFound'
 import router from './app/routes'
 import { handleWebDAV } from './app/utils/webdav'
 import { User } from './app/modules/user/user.model'
 import { decrypt } from './app/utils/encryption'
+import config from './app/config'
 
 const app: Application = express()
 
-app.set('trust proxy', true)
+app.set('trust proxy', 1)
 
 // ────────────────────────────────────────────────────────────────────────────
 // WebDAV Gateway (Swiss-Made Policy, Self-Hosted on VPS Express Server)
@@ -89,13 +91,28 @@ app.use(async (req, res, next) => {
   }
 });
 
-//* parser
-app.use(express.json({ limit: '500mb' }));
-app.use(express.urlencoded({ limit: '500mb', extended: true }));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
+)
+
+//* parser — keep JSON body small; large files should go through multipart/S3
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ limit: '10mb', extended: true }))
+
+const allowedOrigins = [config.client_url, config.server_url].filter(
+  (origin): origin is string => Boolean(origin),
+)
 
 app.use(
-   cors({
-    origin: true,
+  cors({
+    origin(origin, callback) {
+      // non-browser clients (mobile apps, curl, WebDAV) send no Origin
+      if (!origin) return callback(null, true)
+      if (allowedOrigins.includes(origin)) return callback(null, true)
+      return callback(null, false)
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   }),
