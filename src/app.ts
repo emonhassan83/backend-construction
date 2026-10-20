@@ -8,7 +8,6 @@ import router from './app/routes'
 import { handleWebDAV } from './app/utils/webdav'
 import { User } from './app/modules/user/user.model'
 import { decrypt } from './app/utils/encryption'
-import config from './app/config'
 
 const app: Application = express()
 
@@ -101,18 +100,9 @@ app.use(
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }))
 
-const allowedOrigins = [config.client_url, config.server_url].filter(
-  (origin): origin is string => Boolean(origin),
-)
-
 app.use(
   cors({
-    origin(origin, callback) {
-      // non-browser clients (mobile apps, curl, WebDAV) send no Origin
-      if (!origin) return callback(null, true)
-      if (allowedOrigins.includes(origin)) return callback(null, true)
-      return callback(null, false)
-    },
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   }),
